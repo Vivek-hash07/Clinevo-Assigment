@@ -1,0 +1,63 @@
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand-row">
+      <div class="brand-mark sm">C</div>
+      <div>
+        <p class="eyebrow">Clinevo</p>
+        <strong>Smart Inbox</strong>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button type="button" class="btn ghost" (click)="syncMail()" [disabled]="syncing()">
+        {{ syncing() ? 'Checking mailbox…' : 'Sync my mail' }}
+      </button>
+      <div class="who">
+        <span>{{ auth.user()?.name || auth.user()?.email }}</span>
+        <button type="button" class="linkish" (click)="auth.logout()">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="inbox">
+    <div class="inbox-head">
+      <div>
+        <h1>Reviewer queue</h1>
+        <p class="muted">Incoming messages appear here after a mailbox sync.</p>
+      </div>
+      <div class="status-pill" [class.on]="auth.user()?.gmail_connected">
+        {{ auth.user()?.gmail_connected ? 'Mailbox connected' : 'Mailbox not connected' }}
+      </div>
+    </div>
+
+    @if (notice()) {
+      <div class="banner" [class.error]="noticeKind() === 'warn'" [class.ok]="noticeKind() === 'ok'">
+        {{ notice() }}
+      </div>
+    }
+
+    @if (loading()) {
+      <p class="muted">Loading queue…</p>
+    } @else if (items().length === 0) {
+      <div class="empty">
+        <h2>No messages yet</h2>
+        <p>
+          When mail is synced, this list will show sender, subject, and status so you can open a
+          record and review the suggested classification.
+        </p>
+      </div>
+    } @else {
+      <ul class="queue">
+        @for (item of items(); track item.id) {
+          <li>
+            <div>
+              <strong>{{ item.subject || '(no subject)' }}</strong>
+              <p class="muted">{{ item.sender }}</p>
+            </div>
+            <span class="chip">{{ item.status }}</span>
+          </li>
+        }
+      </ul>
+    }
+  </main>
+</div>

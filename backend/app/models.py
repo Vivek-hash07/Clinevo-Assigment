@@ -1,0 +1,242 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+def _uuid() -> str:
+    return str(uuid.uuid4())
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    gmail_credential: Mapped[GmailCredential | None] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GmailCredential(Base):
+    __tablename__ = "gmail_credentials"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scopes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    gmail_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    sync_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="gmail_credential")
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    gmail_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sender: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    subject: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (UniqueConstraint("user_id", "gmail_message_id", name="uq_messages_user_gmail_id"),)
+
+    attachments: Mapped[list[Attachment]] = relationship(back_populates="message", cascade="all, delete-orphan")
+    classifications: Mapped[list[Classification]] = relationship(
+        back_populates="message", cascade="all, delete-orphan"
+    )
+    extracted_fields: Mapped[list[ExtractedField]] = relationship(
+        back_populates="message", cascade="all, delete-orphan"
+    )
+
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    message_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime: Mapped[str] = mapped_column(String(255), nullable=False, default="application/octet-stream")
+    checksum: Mapped[str] = mapped_column(String(128), nullable=False)
+    processed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("message_id", "checksum", name="uq_attachments_message_checksum"),)
+
+    message: Mapped[Message] = relationship(back_populates="attachments")
+    pages: Mapped[list[PdfPage]] = relationship(back_populates="attachment", cascade="all, delete-orphan")
+
+
+class PdfPage(Base):
+    __tablename__ = "pdf_pages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    attachment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("attachments.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    language: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    ocr_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    flavor: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    attachment: Mapped[Attachment] = relationship(back_populates="pages")
+
+
+class Classification(Base):
+    __tablename__ = "classifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    message_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    message: Mapped[Message] = relationship(back_populates="classifications")
+
+
+class ExtractedField(Base):
+    __tablename__ = "extracted_fields"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    message_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    field: Mapped[str] = mapped_column(String(128), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="Not stated")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    source_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    message: Mapped[Message] = relationship(back_populates="extracted_fields")
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    message_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    field_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    message_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PipelineRun(Base):
+    __tablename__ = "pipeline_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    inngest_run_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    message_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    function_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
