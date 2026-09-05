@@ -57,6 +57,10 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET and TOKEN_ENCRYPTION_KEY must each be at least 32 characters")
         if not all((self.smtp_host, self.smtp_user, self.smtp_password, self.smtp_from)):
             raise ValueError("SMTP settings are required in production")
+        if self.inngest_dev:
+            raise ValueError("INNGEST_DEV must be false in production")
+        if not self.inngest_signing_key:
+            raise ValueError("INNGEST_SIGNING_KEY is required in production")
         return self
 
     access_token_ttl_seconds: int = 60 * 15
@@ -69,6 +73,15 @@ class Settings(BaseSettings):
 
     google_scopes: str = Field(default="openid email profile")
     gmail_scope: str = Field(default="https://www.googleapis.com/auth/gmail.readonly")
+
+    inngest_app_id: str = "clinevo-smart-inbox"
+    inngest_dev: bool = True
+    inngest_event_key: str = ""
+    inngest_signing_key: str = ""
+    gmail_sync_max_messages: int = 50
+    attachment_max_bytes: int = 20 * 1024 * 1024
+    attachment_dir: str = str(BACKEND_DIR / "var" / "attachments")
+    message_body_max_chars: int = 500_000
 
 
 @lru_cache

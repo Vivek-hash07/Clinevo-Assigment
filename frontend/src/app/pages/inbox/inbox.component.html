@@ -9,6 +9,9 @@
     </div>
 
     <div class="top-actions">
+      <button type="button" class="btn ghost" (click)="seedMailbox()" [disabled]="seeding()">
+        {{ seeding() ? 'Sending samples…' : 'Send sample mail' }}
+      </button>
       <button type="button" class="btn ghost" (click)="syncMail()" [disabled]="syncing()">
         {{ syncing() ? 'Checking mailbox…' : 'Sync my mail' }}
       </button>
@@ -23,7 +26,10 @@
     <div class="inbox-head">
       <div>
         <h1>Reviewer queue</h1>
-        <p class="muted">Incoming messages appear here after a mailbox sync.</p>
+        <p class="muted">
+          Mail is pulled from Gmail in the background. Status moves from pending to processing, then
+          ready for review.
+        </p>
       </div>
       <div class="status-pill" [class.on]="auth.user()?.gmail_connected">
         {{ auth.user()?.gmail_connected ? 'Mailbox connected' : 'Mailbox not connected' }}
@@ -36,14 +42,32 @@
       </div>
     }
 
+    <nav class="queue-filters" aria-label="Queue status">
+      <button type="button" [class.active]="status() === null" (click)="setStatus(null)">
+        All {{ counts().total }}
+      </button>
+      <button type="button" [class.active]="status() === 'pending'" (click)="setStatus('pending')">
+        Pending {{ counts().pending }}
+      </button>
+      <button type="button" [class.active]="status() === 'processing'" (click)="setStatus('processing')">
+        Processing {{ counts().processing }}
+      </button>
+      <button type="button" [class.active]="status() === 'ready'" (click)="setStatus('ready')">
+        Ready {{ counts().ready }}
+      </button>
+      <button type="button" [class.active]="status() === 'reviewed'" (click)="setStatus('reviewed')">
+        Reviewed {{ counts().reviewed }}
+      </button>
+    </nav>
+
     @if (loading()) {
       <p class="muted">Loading queue…</p>
     } @else if (items().length === 0) {
       <div class="empty">
-        <h2>No messages yet</h2>
+        <h2>No messages in this view</h2>
         <p>
-          When mail is synced, this list will show sender, subject, and status so you can open a
-          record and review the suggested classification.
+          Connect Gmail, send the synthetic samples, then sync. Intake stores sender, subject, date,
+          body, and PDF attachments. Other file types are logged and left unprocessed.
         </p>
       </div>
     } @else {
@@ -52,9 +76,23 @@
           <li>
             <div>
               <strong>{{ item.subject || '(no subject)' }}</strong>
-              <p class="muted">{{ item.sender }}</p>
+              <p class="muted">
+                {{ item.sender }}
+                @if (item.sent_at) {
+                  · {{ item.sent_at | date: 'medium' }}
+                }
+              </p>
+              @if (item.snippet) {
+                <p class="muted snippet">{{ item.snippet }}</p>
+              }
+              <p class="muted meta">
+                {{ item.pdf_count }} PDF
+                @if (item.skipped_attachment_count) {
+                  · {{ item.skipped_attachment_count }} skipped
+                }
+              </p>
             </div>
-            <span class="chip">{{ item.status }}</span>
+            <span class="chip" [attr.data-status]="item.status">{{ item.status }}</span>
           </li>
         }
       </ul>

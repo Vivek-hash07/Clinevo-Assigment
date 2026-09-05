@@ -83,6 +83,9 @@ class GmailCredential(Base):
     scopes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     gmail_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     sync_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    history_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -99,10 +102,13 @@ class Message(Base):
         String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
     )
     gmail_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gmail_thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sender: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     subject: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    snippet: Mapped[str] = mapped_column(Text, nullable=False, default="")
     body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -131,6 +137,10 @@ class Attachment(Base):
     mime: Mapped[str] = mapped_column(String(255), nullable=False, default="application/octet-stream")
     checksum: Mapped[str] = mapped_column(String(128), nullable=False)
     processed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    skipped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    skip_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    gmail_attachment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

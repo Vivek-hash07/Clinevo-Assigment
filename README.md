@@ -38,7 +38,7 @@ Continue with Google only asks for **openid, email, profile**. That is enough fo
 
 If status stays **Testing**, Google will only allow emails you add as testers. Publishing is what opens it to every Google account.
 
-**Gmail mailbox sync** uses the restricted `gmail.readonly` scope. Google will still block that for the public until you complete Gmail API verification. Sign-in does not wait on that. Use **Sync my mail** after login when you are ready to request mailbox access.
+**Gmail mailbox sync** uses the restricted `gmail.readonly` scope. Google will still block that for the public until you complete Gmail API verification. Sign-in does not wait on that. After login, use **Sync my mail** to grant mailbox access. Tokens are encrypted at rest; Inngest refreshes access tokens without keeping the user in the tab.
 
 **Authorized JavaScript origins** (this is the origin)
 
@@ -79,6 +79,50 @@ npm start
 ```
 
 Tables are created on API startup.
+
+## Gmail intake (Day 2)
+
+After Google sign-in, use **Sync my mail** once. That requests `gmail.readonly`, stores the Gmail **refresh token encrypted** (Fernet, key from `TOKEN_ENCRYPTION_KEY`), and enables background sync.
+
+Enable the **Gmail API** on the same Google Cloud project as the OAuth client.
+
+### Inngest (required for sync)
+
+Local:
+
+```bash
+npx inngest-cli@latest dev -u http://localhost:8080/api/inngest
+```
+
+Keep FastAPI on **8080** and `INNGEST_DEV=1` in `backend/.env`. The Dev Server UI is http://localhost:8288.
+
+What runs:
+
+1. `gmail/sync` — cron every 2 minutes, fans out one job per connected mailbox.
+2. `gmail/sync mailbox` — Gmail History API when we have a cursor; otherwise a bounded inbox list. Enqueues each Gmail message id.
+3. `email/ingest` — fetches sender, subject, date, body, PDF bytes; logs non-PDF attachments; upserts by `(user_id, gmail_message_id)`.
+
+Manual **Sync my mail** sends `gmail/sync.mailbox` immediately. Re-runs are idempotent.
+
+Production: unset `INNGEST_DEV`, set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`, and point Inngest Cloud at `https://<api>/api/inngest`.
+
+### Synthetic test mail
+
+Only made-up content. From the inbox, **Send sample mail**, or:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m app.scripts.seed_mailbox you@gmail.com
+```
+
+Wait ~15 seconds for Gmail to accept the messages, then sync. One sample includes a CSV so you can confirm non-PDFs are logged and skipped.
+
+### Reviewer queue API
+
+`GET /api/messages?status=pending|processing|ready|reviewed`
+
+Statuses: **pending** (ingested), **processing** (pipeline running), **ready** (AI finished — Day 4), **reviewed** (human signed off — Day 5). `GET /api/messages/{id}` returns body and attachment metadata.
 
 ## Auth
 

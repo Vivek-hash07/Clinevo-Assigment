@@ -123,9 +123,9 @@ http://localhost:8000
 http://localhost:8080/api/auth/google/callback
 ```
 
-- Angular (`frontend`): **http://localhost:8000**
-- FastAPI (`backend`): **http://localhost:8080**
-- After login the app lands on **http://localhost:8000/inbox**
+- Angular (`frontend`): **[http://localhost:8000](http://localhost:8000)**
+- FastAPI (`backend`): **[http://localhost:8080](http://localhost:8080)**
+- After login the app lands on **[http://localhost:8000/inbox](http://localhost:8000/inbox)**
 - No trailing slashes
 - Env: `GOOGLE_REDIRECT_URI=http://localhost:8080/api/auth/google/callback`
 - Use `localhost`, not `127.0.0.1`, so cookies and Google origins match
@@ -296,7 +296,7 @@ Ground rules:
 
 ### Day 3 — PDF step 1
 
-1. Flavor detector + digital extract + table extract.
+1. Flavor detector + digital extract + table extract fallback use LLM via Openrouter for all step 1.
 2. Scan path: rasterize pages → OCR / vision → confidence.
 3. Language detect + translate; keep original.
 4. Store per-page text so facts can cite page numbers.

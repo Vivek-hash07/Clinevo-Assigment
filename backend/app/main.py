@@ -52,6 +52,8 @@ def create_app() -> FastAPI:
 
     @application.middleware("http")
     async def reject_untrusted_browser_writes(request: Request, call_next):
+        if request.url.path.rstrip("/") == "/api/inngest":
+            return await call_next(request)
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
             if origin and origin.rstrip("/") not in _trusted_origins(
@@ -65,9 +67,12 @@ def create_app() -> FastAPI:
     application.include_router(gmail.router)
     application.include_router(messages.router)
 
-    @application.api_route("/api/inngest", methods=["GET", "PUT", "POST"])
-    def inngest_placeholder() -> dict[str, str]:
-        return {"status": "ok"}
+    import inngest.fast_api
+
+    from app.inngest_client import inngest_client
+    from app.jobs import INNGEST_FUNCTIONS
+
+    inngest.fast_api.serve(application, inngest_client, INNGEST_FUNCTIONS)
 
     return application
 

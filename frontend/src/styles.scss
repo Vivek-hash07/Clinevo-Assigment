@@ -364,6 +364,52 @@ input:focus {
   color: var(--teal-deep);
 }
 
+.chip[data-status="processing"] {
+  color: var(--warn);
+}
+
+.chip[data-status="ready"] {
+  color: var(--ok);
+}
+
+.chip[data-status="reviewed"] {
+  color: var(--ink-soft);
+}
+
+.queue-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+}
+
+.queue-filters button {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.queue-filters button.active {
+  background: var(--teal-deep);
+  color: #f7f3ea;
+  border-color: var(--teal-deep);
+}
+
+.snippet {
+  font-size: 0.9rem;
+  margin: 0.2rem 0 0;
+}
+
+.meta {
+  font-size: 0.78rem;
+  margin: 0.35rem 0 0;
+}
+
 @media (max-width: 860px) {
   .auth-layout {
     grid-template-columns: 1fr;

@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
-from app.models import AuditEvent, GmailCredential, PasswordResetToken, RefreshToken, User
+from app.models import GmailCredential, PasswordResetToken, RefreshToken, User
 from app.schemas import UserOut
 from app.security import (
     create_token,
@@ -21,6 +21,7 @@ from app.security import (
     new_opaque_token,
     verify_password,
 )
+from app.services.audit import write_audit
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -117,14 +118,10 @@ def revoke_refresh_token(db: Session, token: str | None) -> None:
     db.commit()
 
 
-def write_audit(db: Session, event_type: str, user_id: str | None, payload: dict) -> None:
-    db.add(AuditEvent(event_type=event_type, user_id=user_id, payload=payload))
-
-
 def user_to_out(user: User) -> UserOut:
     cred = user.gmail_credential
     google_linked = bool(user.google_sub)
-    gmail_connected = bool(cred and cred.refresh_token_encrypted)
+    gmail_connected = bool(cred and cred.refresh_token_encrypted and cred.sync_enabled)
     if google_linked and not user.password_hash:
         provider = "google"
     elif user.password_hash and google_linked:
@@ -368,10 +365,21 @@ def upsert_google_user(db: Session, settings: Settings, code: str) -> User:
         cred.gmail_email = email
         cred.scopes = scope
         cred.token_expiry = expiry
+        cred.last_error = None
         if access_token:
             cred.access_token_encrypted = encrypt_secret(access_token)
         if refresh_token:
             cred.refresh_token_encrypted = encrypt_secret(refresh_token)
+        cred.sync_enabled = bool(cred.refresh_token_encrypted)
+        if refresh_token:
+            write_audit(
+                db,
+                "gmail.connected",
+                user.id,
+                {"gmail_email": email, "has_refresh_token": True},
+            )
+        elif not cred.refresh_token_encrypted:
+            cred.last_error = "Google did not return a refresh token. Reconnect mail with consent."
 
     write_audit(
         db,

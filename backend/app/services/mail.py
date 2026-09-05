@@ -7,7 +7,13 @@ from html import escape
 from app.config import Settings, get_settings
 
 
-def send_mail(to_email: str, subject: str, text_body: str, html_body: str | None = None) -> None:
+def send_mail(
+    to_email: str,
+    subject: str,
+    text_body: str,
+    html_body: str | None = None,
+    attachments: list[tuple[str, str, bytes]] | None = None,
+) -> None:
     settings = get_settings()
     if not settings.smtp_host or not settings.smtp_from:
         raise RuntimeError("SMTP is not available")
@@ -19,6 +25,14 @@ def send_mail(to_email: str, subject: str, text_body: str, html_body: str | None
     message.set_content(text_body)
     if html_body:
         message.add_alternative(html_body, subtype="html")
+    for filename, mime, blob in attachments or []:
+        maintype, _, subtype = mime.partition("/")
+        message.add_attachment(
+            blob,
+            maintype=maintype or "application",
+            subtype=subtype or "octet-stream",
+            filename=filename,
+        )
 
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
         if settings.smtp_use_tls:

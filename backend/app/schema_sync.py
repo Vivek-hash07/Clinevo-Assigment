@@ -6,7 +6,7 @@ from sqlalchemy.sql.schema import Column
 
 from app.database import Base, engine
 
-MIGRATION_VERSION = 4
+MIGRATION_VERSION = 6
 
 
 def _default_clause(column: Column) -> str:
@@ -122,6 +122,29 @@ def ensure_schema() -> None:
             text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_refresh_tokens_hash "
                 "ON refresh_tokens (token_hash)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_user_gmail_id "
+                "ON messages (user_id, gmail_message_id) "
+                "WHERE gmail_message_id IS NOT NULL"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_attachments_message_checksum "
+                "ON attachments (message_id, checksum)"
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_status ON messages (status)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_user_id ON messages (user_id)"))
+        conn.execute(
+            text(
+                "UPDATE gmail_credentials SET sync_enabled = true "
+                "WHERE refresh_token_encrypted IS NOT NULL "
+                "AND refresh_token_encrypted <> '' "
+                "AND sync_enabled = false"
             )
         )
         conn.execute(

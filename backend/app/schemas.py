@@ -70,3 +70,64 @@ class SyncMailOut(BaseModel):
     queued: bool
     gmail_connected: bool
     message: str
+    queued_event_ids: list[str] = []
+
+
+class GmailStatusOut(BaseModel):
+    connected: bool
+    sync_enabled: bool
+    gmail_email: str | None
+    last_synced_at: str | None
+    last_error: str | None
+
+
+class SeedSyntheticOut(BaseModel):
+    ok: bool
+    to: str
+    count: int
+    sent: list[str]
+    message: str
+
+
+class QueueCounts(BaseModel):
+    pending: int = 0
+    processing: int = 0
+    ready: int = 0
+    reviewed: int = 0
+    total: int = 0
+
+
+class QueueAttachmentOut(BaseModel):
+    id: str
+    filename: str
+    mime: str
+    skipped: bool
+    skip_reason: str | None
+    size_bytes: int | None
+    processed: bool
+
+
+class QueueItemOut(BaseModel):
+    id: str
+    sender: str
+    subject: str
+    status: str
+    sent_at: str | None
+    snippet: str = ""
+    pdf_count: int = 0
+    skipped_attachment_count: int = 0
+
+
+class QueueListOut(BaseModel):
+    items: list[QueueItemOut]
+    counts: QueueCounts
+    status: str | None = None
+    limit: int
+    offset: int
+
+
+class QueueDetailOut(QueueItemOut):
+    body: str
+    body_html: str | None = None
+    gmail_message_id: str | None = None
+    attachments: list[QueueAttachmentOut]

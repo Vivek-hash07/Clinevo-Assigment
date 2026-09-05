@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { Observable, catchError, map, of, tap } from 'rxjs';
 
 import { environment } from './environment';
-import { AuthConfig, AuthUser, QueueItem, SyncMailResult } from './models';
+import { AuthConfig, AuthUser } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -86,14 +86,6 @@ export class AuthService {
   startGoogle(intent: 'signin' | 'signup' | 'gmail'): void {
     const next = '/inbox';
     window.location.href = `${this.api}/api/auth/google?intent=${intent}&next=${encodeURIComponent(next)}`;
-  }
-
-  messages(): Observable<QueueItem[]> {
-    return this.http.get<QueueItem[]>(`${this.api}/api/messages`);
-  }
-
-  syncMail(): Observable<SyncMailResult> {
-    return this.http.post<SyncMailResult>(`${this.api}/api/gmail/sync`, {});
   }
 
   isAuthenticated(): Observable<boolean> {

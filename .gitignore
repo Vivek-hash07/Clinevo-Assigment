@@ -36,3 +36,6 @@ Thumbs.db
 *.log
 .coverage
 htmlcov/
+
+# Ingested PDF blobs (content-addressed files)
+backend/var/
