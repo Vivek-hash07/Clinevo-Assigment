@@ -61,6 +61,8 @@ class Settings(BaseSettings):
             raise ValueError("INNGEST_DEV must be false in production")
         if not self.inngest_signing_key:
             raise ValueError("INNGEST_SIGNING_KEY is required in production")
+        if not self.openrouter_api_key:
+            raise ValueError("OPENROUTER_API_KEY is required in production")
         return self
 
     access_token_ttl_seconds: int = 60 * 15
@@ -82,6 +84,21 @@ class Settings(BaseSettings):
     attachment_max_bytes: int = 20 * 1024 * 1024
     attachment_dir: str = str(BACKEND_DIR / "var" / "attachments")
     message_body_max_chars: int = 500_000
+
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "openai/gpt-4o-mini"
+    openrouter_vision_model: str = "openai/gpt-4o-mini"
+    openrouter_timeout_seconds: int = 90
+    openrouter_max_retries: int = 3
+    openrouter_http_referer: str = ""
+    openrouter_app_title: str = "Clinevo Smart Inbox"
+
+    pdf_max_pages: int = 40
+    pdf_render_scale: float = 2.0
+    pdf_page_text_max_chars: int = 20_000
+    ocr_confidence_threshold: float = 0.72
+    llm_hallucination_overlap_min: float = 0.18
 
 
 @lru_cache

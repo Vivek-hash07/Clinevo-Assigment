@@ -6,8 +6,16 @@ from sqlalchemy.orm import selectinload
 
 from app.constants import QUEUE_STATUSES
 from app.deps import CurrentUser, DbSession
-from app.models import Message
-from app.schemas import QueueAttachmentOut, QueueCounts, QueueDetailOut, QueueItemOut, QueueListOut
+from app.models import Attachment, Message, PdfPage
+from app.schemas import (
+    PdfPageOut,
+    PdfPagesOut,
+    QueueAttachmentOut,
+    QueueCounts,
+    QueueDetailOut,
+    QueueItemOut,
+    QueueListOut,
+)
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
 
@@ -106,7 +114,62 @@ def get_message(message_id: str, user: CurrentUser, db: DbSession) -> QueueDetai
                 skip_reason=item.skip_reason,
                 size_bytes=item.size_bytes,
                 processed=item.processed,
+                page_count=item.page_count,
+                document_flavor=item.document_flavor,
+                duration_ms=item.duration_ms,
+                extract_error=item.extract_error,
             )
             for item in row.attachments
         ],
+    )
+
+
+def _page_out(page: PdfPage) -> PdfPageOut:
+    return PdfPageOut(
+        id=str(page.id),
+        page_number=page.page_number,
+        text=page.text or "",
+        original_text=page.original_text or "",
+        translated_text=page.translated_text,
+        language=page.language,
+        language_confidence=page.language_confidence,
+        ocr_confidence=page.ocr_confidence,
+        llm_score=page.llm_score,
+        flavor=page.flavor,
+        extract_method=page.extract_method,
+        column_count=page.column_count,
+        tables=page.tables or [],
+        image_notes=page.image_notes or [],
+        needs_human_review=bool(page.needs_human_review),
+        review_reasons=page.review_reasons or [],
+        source_ref=page.source_ref,
+    )
+
+
+@router.get("/{message_id}/attachments/{attachment_id}/pages", response_model=PdfPagesOut)
+def get_attachment_pages(
+    message_id: str,
+    attachment_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> PdfPagesOut:
+    attachment = db.scalar(
+        select(Attachment)
+        .options(selectinload(Attachment.pages), selectinload(Attachment.message))
+        .where(Attachment.id == attachment_id)
+    )
+    if attachment is None or attachment.message is None or attachment.message_id != message_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+    if attachment.message.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+    pages = sorted(attachment.pages, key=lambda item: item.page_number)
+    return PdfPagesOut(
+        attachment_id=str(attachment.id),
+        filename=attachment.filename,
+        document_flavor=attachment.document_flavor,
+        processed=attachment.processed,
+        page_count=attachment.page_count if attachment.page_count is not None else len(pages),
+        duration_ms=attachment.duration_ms,
+        extract_error=attachment.extract_error,
+        pages=[_page_out(page) for page in pages],
     )

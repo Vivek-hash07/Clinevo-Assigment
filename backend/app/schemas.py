@@ -105,6 +105,41 @@ class QueueAttachmentOut(BaseModel):
     skip_reason: str | None
     size_bytes: int | None
     processed: bool
+    page_count: int | None = None
+    document_flavor: str | None = None
+    duration_ms: int | None = None
+    extract_error: str | None = None
+
+
+class PdfPageOut(BaseModel):
+    id: str
+    page_number: int
+    text: str
+    original_text: str
+    translated_text: str | None = None
+    language: str | None = None
+    language_confidence: float | None = None
+    ocr_confidence: float | None = None
+    llm_score: float | None = None
+    flavor: str | None = None
+    extract_method: str | None = None
+    column_count: int | None = None
+    tables: list = []
+    image_notes: list = []
+    needs_human_review: bool = False
+    review_reasons: list = []
+    source_ref: str | None = None
+
+
+class PdfPagesOut(BaseModel):
+    attachment_id: str
+    filename: str
+    document_flavor: str | None = None
+    processed: bool
+    page_count: int | None = None
+    duration_ms: int | None = None
+    extract_error: str | None = None
+    pages: list[PdfPageOut]
 
 
 class QueueItemOut(BaseModel):

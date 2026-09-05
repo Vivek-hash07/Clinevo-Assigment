@@ -6,7 +6,7 @@ from sqlalchemy.sql.schema import Column
 
 from app.database import Base, engine
 
-MIGRATION_VERSION = 6
+MIGRATION_VERSION = 7
 
 
 def _default_clause(column: Column) -> str:
@@ -135,6 +135,12 @@ def ensure_schema() -> None:
             text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_attachments_message_checksum "
                 "ON attachments (message_id, checksum)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_pdf_pages_attachment_page "
+                "ON pdf_pages (attachment_id, page_number)"
             )
         )
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_status ON messages (status)"))

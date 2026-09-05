@@ -100,7 +100,8 @@ What runs:
 
 1. `gmail/sync` — cron every 2 minutes, fans out one job per connected mailbox.
 2. `gmail/sync mailbox` — Gmail History API when we have a cursor; otherwise a bounded inbox list. Enqueues each Gmail message id.
-3. `email/ingest` — fetches sender, subject, date, body, PDF bytes; logs non-PDF attachments; upserts by `(user_id, gmail_message_id)`.
+3. `email/ingest` — fetches sender, subject, date, body, PDF bytes; logs non-PDF attachments; upserts by `(user_id, gmail_message_id)`; fans out each PDF.
+4. `pdf/process` — flavor detect, digital extract or OCR/vision, language + translation, store `pdf_pages`. Emits `pdf/extracted` when every PDF on the message is done (Day 4 hook).
 
 Manual **Sync my mail** sends `gmail/sync.mailbox` immediately. Re-runs are idempotent.
 
@@ -122,7 +123,25 @@ Wait ~15 seconds for Gmail to accept the messages, then sync. One sample include
 
 `GET /api/messages?status=pending|processing|ready|reviewed`
 
-Statuses: **pending** (ingested), **processing** (pipeline running), **ready** (AI finished — Day 4), **reviewed** (human signed off — Day 5). `GET /api/messages/{id}` returns body and attachment metadata.
+Statuses: **pending** (ingested, PDFs extracted), **processing** (pipeline running), **ready** (AI finished — Day 4), **reviewed** (human signed off — Day 5). `GET /api/messages/{id}` returns body and attachment metadata. `GET /api/messages/{id}/attachments/{attachmentId}/pages` returns per-page original text, translation, flavor, OCR confidence, LLM score, and `pdf:{id}:page:{n}` source refs.
+
+## PDF step 1 (Day 3)
+
+After `email/ingest` stores a PDF, Inngest runs **`pdf/process`** (one job per attachment, idempotent on message id + checksum).
+
+1. **Flavor detector** — local signals (text-layer density, images, columns) plus OpenRouter confirmation.
+2. **Digital pages** — `pdfplumber` text (column-aware for articles) and real table grids. OpenRouter cleans, scores, and repairs tables if the local grid is empty or ragged.
+3. **Scanned / handwriting** — rasterize with pypdfium2 → Tesseract OCR (if installed) → OpenRouter vision on the page image. OCR is a prior; vision is ground truth when the layer is weak. Both scores are stored.
+4. **Language** — `langdetect` + OpenRouter. Non-English pages are translated to English; **original text is always kept**. The working `text` field is English so Day 4 can classify on one language.
+5. **Per-page rows** in `pdf_pages` so later facts can cite `pdf:{attachmentId}:page:{n}`.
+
+Set `OPENROUTER_API_KEY` in `backend/.env`. Optional but recommended for scan confidence:
+
+```bash
+brew install tesseract
+```
+
+Without Tesseract, scanned pages still go through OpenRouter vision. Without an API key, local extract still runs and the page is flagged `needs_human_review`.
 
 ## Auth
 

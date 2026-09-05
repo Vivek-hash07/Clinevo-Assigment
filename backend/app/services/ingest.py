@@ -142,13 +142,27 @@ def ingest_gmail_message(user_id: str, gmail_message_id: str, inngest_run_id: st
                 Message.gmail_message_id == gmail_message_id,
             )
         )
-        if existing is not None and existing.status in {STATUS_READY, STATUS_REVIEWED, STATUS_PENDING}:
+        if existing is not None and existing.status in {
+            STATUS_READY,
+            STATUS_REVIEWED,
+            STATUS_PENDING,
+            STATUS_PROCESSING,
+        }:
             if existing.body or existing.attachments:
+                payload = _pdf_attachment_payload(existing)
+                if payload and existing.status != STATUS_REVIEWED:
+                    existing.status = STATUS_PROCESSING
                 run.status = "skipped"
                 run.finished_at = datetime.now(UTC)
                 run.duration_ms = int((run.finished_at - started).total_seconds() * 1000)
                 run.message_id = existing.id
-                return {"ok": True, "duplicate": True, "message_id": existing.id, "status": existing.status}
+                return {
+                    "ok": True,
+                    "duplicate": True,
+                    "message_id": existing.id,
+                    "status": existing.status,
+                    "pdf_attachments": payload,
+                }
 
         user = db.get(User, user_id)
         cred = db.scalar(select(GmailCredential).where(GmailCredential.user_id == user_id))
@@ -195,13 +209,14 @@ def ingest_gmail_message(user_id: str, gmail_message_id: str, inngest_run_id: st
                         "duplicate": True,
                         "message_id": winner.id,
                         "status": winner.status,
+                        "pdf_attachments": _pdf_attachment_payload(winner),
                     }
                 raise
 
         _apply_parsed_message(db, message, parsed, settings)
         stored, skipped = _persist_attachments(db, client, message, parsed, settings)
-
-        message.status = STATUS_PENDING
+        payload = _pdf_attachment_payload(message)
+        message.status = STATUS_PROCESSING if payload else STATUS_PENDING
         finished = datetime.now(UTC)
         run.message_id = message.id
         run.finished_at = finished
@@ -226,6 +241,7 @@ def ingest_gmail_message(user_id: str, gmail_message_id: str, inngest_run_id: st
             "status": message.status,
             "pdfs": stored,
             "skipped_attachments": skipped,
+            "pdf_attachments": payload,
         }
 
 
@@ -286,19 +302,19 @@ def _persist_attachments(
             if checksum in existing_checksums:
                 continue
             key = storage.put_bytes(checksum, data, suffix=".pdf")
-            db.add(
-                Attachment(
-                    message_id=message.id,
-                    filename=part.filename[:512],
-                    mime=part.mime or "application/pdf",
-                    checksum=checksum,
-                    processed=False,
-                    skipped=False,
-                    storage_key=key,
-                    gmail_attachment_id=part.attachment_id,
-                    size_bytes=size,
-                )
+            attachment = Attachment(
+                message_id=message.id,
+                filename=part.filename[:512],
+                mime=part.mime or "application/pdf",
+                checksum=checksum,
+                processed=False,
+                skipped=False,
+                storage_key=key,
+                gmail_attachment_id=part.attachment_id,
+                size_bytes=size,
             )
+            db.add(attachment)
+            message.attachments.append(attachment)
             existing_checksums.add(checksum)
             stored += 1
             continue
@@ -348,3 +364,23 @@ def _add_skipped(
         )
     )
     existing_checksums.add(checksum)
+
+
+def _pdf_attachment_payload(message: Message) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for attachment in message.attachments:
+        if attachment.skipped or attachment.processed or not attachment.storage_key:
+            continue
+        mime = (attachment.mime or "").lower()
+        if not (mime.startswith("application/pdf") or attachment.filename.lower().endswith(".pdf")):
+            continue
+        if not attachment.id:
+            continue
+        rows.append(
+            {
+                "id": attachment.id,
+                "checksum": attachment.checksum,
+                "filename": attachment.filename,
+            }
+        )
+    return rows

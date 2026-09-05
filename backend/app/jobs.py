@@ -11,6 +11,12 @@ from app.services.ingest import (
     list_all_syncable_user_ids,
     save_mailbox_cursor,
 )
+from app.services.pdf_pipeline import (
+    finalize_pdf_attachment,
+    inspect_pdf_attachment,
+    mark_pdf_failed,
+    process_pdf_page,
+)
 
 
 @inngest_client.create_function(
@@ -80,7 +86,7 @@ async def email_ingest(ctx: inngest.Context) -> dict:
     user_id = str(ctx.event.data["user_id"])
     gmail_message_id = str(ctx.event.data["gmail_message_id"])
     try:
-        return await ctx.step.run(
+        result = await ctx.step.run(
             "fetch-and-persist",
             ingest_gmail_message,
             user_id,
@@ -95,6 +101,74 @@ async def email_ingest(ctx: inngest.Context) -> dict:
         if exc.status_code == 404:
             raise inngest.NonRetriableError(exc.detail) from exc
         raise
+    attachments = list(result.get("pdf_attachments") or [])
+    message_id = result.get("message_id")
+    if attachments and message_id:
+        await ctx.step.send_event(
+            "fan-out-pdfs",
+            [
+                inngest.Event(
+                    name="pdf/attached",
+                    id=f"pdf-{message_id}-{item['checksum']}",
+                    data={
+                        "user_id": user_id,
+                        "message_id": message_id,
+                        "attachment_id": item["id"],
+                        "checksum": item["checksum"],
+                        "filename": item.get("filename"),
+                    },
+                )
+                for item in attachments
+            ],
+        )
+    return result
 
 
-INNGEST_FUNCTIONS = [gmail_sync, gmail_sync_mailbox, email_ingest]
+@inngest_client.create_function(
+    fn_id="pdf-process",
+    name="pdf/process",
+    trigger=inngest.TriggerEvent(event="pdf/attached"),
+    retries=3,
+    concurrency=[
+        inngest.Concurrency(limit=2, key="event.data.user_id"),
+        inngest.Concurrency(limit=4),
+    ],
+    idempotency="event.data.message_id + '-' + event.data.checksum",
+)
+async def pdf_process(ctx: inngest.Context) -> dict:
+    attachment_id = str(ctx.event.data["attachment_id"])
+    try:
+        meta = await ctx.step.run("inspect-pdf", inspect_pdf_attachment, attachment_id, ctx.run_id)
+        if meta.get("retryable"):
+            raise RuntimeError(str(meta.get("reason") or "pdf_inspect_retryable"))
+        if meta.get("skip"):
+            return meta
+        page_count = int(meta["page_count"])
+        for page_number in range(1, page_count + 1):
+            await ctx.step.run(
+                f"extract-page-{page_number}",
+                process_pdf_page,
+                attachment_id,
+                page_number,
+                ctx.run_id,
+            )
+        result = await ctx.step.run("finalize-pdf", finalize_pdf_attachment, attachment_id, ctx.run_id)
+        if result.get("emit_extracted") and result.get("message_id"):
+            await ctx.step.send_event(
+                "pdf-extracted",
+                inngest.Event(
+                    name="pdf/extracted",
+                    id=f"pdf-extracted-{result['message_id']}",
+                    data={
+                        "message_id": result["message_id"],
+                        "user_id": result.get("user_id"),
+                    },
+                ),
+            )
+        return result
+    except inngest.NonRetriableError:
+        await ctx.step.run("mark-failed", mark_pdf_failed, attachment_id, ctx.run_id, "non_retriable")
+        raise
+
+
+INNGEST_FUNCTIONS = [gmail_sync, gmail_sync_mailbox, email_ingest, pdf_process]

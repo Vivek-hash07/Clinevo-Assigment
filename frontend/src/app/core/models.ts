@@ -50,6 +50,10 @@ export interface QueueAttachment {
   skip_reason: string | null;
   size_bytes: number | null;
   processed: boolean;
+  page_count?: number | null;
+  document_flavor?: string | null;
+  duration_ms?: number | null;
+  extract_error?: string | null;
 }
 
 export interface QueueDetail extends QueueItem {
