@@ -15,6 +15,23 @@ export interface AuthConfig {
   gmail_scope: string;
 }
 
+export interface Classification {
+  category: string;
+  confidence: number;
+  reason: string;
+}
+
+export interface ExtractedField {
+  field: string;
+  value: string;
+  confidence: number;
+  source_type: string | null;
+  source_id: string | null;
+  source_quote: string | null;
+  source_page: number | null;
+  source_ref: string | null;
+}
+
 export interface QueueItem {
   id: string;
   sender: string;
@@ -24,6 +41,10 @@ export interface QueueItem {
   snippet: string;
   pdf_count: number;
   skipped_attachment_count: number;
+  summary?: string | null;
+  relevant?: boolean | null;
+  needs_human_review?: boolean;
+  classifications?: Classification[];
 }
 
 export interface QueueCounts {
@@ -61,6 +82,10 @@ export interface QueueDetail extends QueueItem {
   body_html: string | null;
   gmail_message_id: string | null;
   attachments: QueueAttachment[];
+  extracted_fields?: ExtractedField[];
+  relevance_reason?: string | null;
+  ai_model?: string | null;
+  ai_prompt_version?: string | null;
 }
 
 export interface SyncMailResult {

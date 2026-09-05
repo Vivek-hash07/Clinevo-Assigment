@@ -8,6 +8,8 @@ from app.constants import QUEUE_STATUSES
 from app.deps import CurrentUser, DbSession
 from app.models import Attachment, Message, PdfPage
 from app.schemas import (
+    ClassificationOut,
+    ExtractedFieldOut,
     PdfPageOut,
     PdfPagesOut,
     QueueAttachmentOut,
@@ -53,6 +55,13 @@ def _item_out(row: Message) -> QueueItemOut:
         snippet=row.snippet or "",
         pdf_count=pdfs,
         skipped_attachment_count=skipped,
+        summary=row.summary,
+        relevant=row.relevant,
+        needs_human_review=bool(row.needs_human_review),
+        classifications=[
+            ClassificationOut(category=item.category, confidence=item.confidence, reason=item.reason)
+            for item in sorted(row.classifications or [], key=lambda item: item.category)
+        ],
     )
 
 
@@ -71,7 +80,7 @@ def list_messages(
         )
     stmt = (
         select(Message)
-        .options(selectinload(Message.attachments))
+        .options(selectinload(Message.attachments), selectinload(Message.classifications))
         .where(Message.user_id == user.id)
     )
     if status_filter:
@@ -94,7 +103,11 @@ def list_messages(
 def get_message(message_id: str, user: CurrentUser, db: DbSession) -> QueueDetailOut:
     row = db.scalar(
         select(Message)
-        .options(selectinload(Message.attachments))
+        .options(
+            selectinload(Message.attachments),
+            selectinload(Message.classifications),
+            selectinload(Message.extracted_fields),
+        )
         .where(Message.id == message_id, Message.user_id == user.id)
     )
     if row is None:
@@ -121,6 +134,22 @@ def get_message(message_id: str, user: CurrentUser, db: DbSession) -> QueueDetai
             )
             for item in row.attachments
         ],
+        extracted_fields=[
+            ExtractedFieldOut(
+                field=item.field,
+                value=item.value,
+                confidence=item.confidence,
+                source_type=item.source_type,
+                source_id=item.source_id,
+                source_quote=item.source_quote,
+                source_page=item.source_page,
+                source_ref=item.source_ref,
+            )
+            for item in sorted(row.extracted_fields, key=lambda item: item.field)
+        ],
+        relevance_reason=row.relevance_reason,
+        ai_model=row.ai_model,
+        ai_prompt_version=row.ai_prompt_version,
     )
 
 

@@ -3,6 +3,12 @@ from __future__ import annotations
 import inngest
 
 from app.inngest_client import inngest_client
+from app.services.ai_pipeline import (
+    classify_message,
+    extract_facts,
+    mark_ai_failed,
+    understand_message,
+)
 from app.services.gmail_client import GmailAuthError, GmailApiError
 from app.services.ingest import (
     IngestSkip,
@@ -121,6 +127,15 @@ async def email_ingest(ctx: inngest.Context) -> dict:
                 for item in attachments
             ],
         )
+    elif message_id and not result.get("skipped") and result.get("status") != "reviewed":
+        await ctx.step.send_event(
+            "email-ingested",
+            inngest.Event(
+                name="email/ingested",
+                id=f"email-ingested-{message_id}",
+                data={"message_id": message_id, "user_id": user_id},
+            ),
+        )
     return result
 
 
@@ -171,4 +186,111 @@ async def pdf_process(ctx: inngest.Context) -> dict:
         raise
 
 
-INNGEST_FUNCTIONS = [gmail_sync, gmail_sync_mailbox, email_ingest, pdf_process]
+@inngest_client.create_function(
+    fn_id="ai-understand",
+    name="ai/understand",
+    trigger=[
+        inngest.TriggerEvent(event="pdf/extracted"),
+        inngest.TriggerEvent(event="email/ingested"),
+    ],
+    retries=3,
+    concurrency=[
+        inngest.Concurrency(limit=2, key="event.data.user_id"),
+        inngest.Concurrency(limit=4),
+    ],
+    idempotency="event.data.message_id + '-understand'",
+)
+async def ai_understand(ctx: inngest.Context) -> dict:
+    message_id = str(ctx.event.data["message_id"])
+    try:
+        result = await ctx.step.run("understand-message", understand_message, message_id, ctx.run_id)
+        if result.get("reason") == "pdfs_open":
+            return result
+        if result.get("ok") and result.get("message_id") and result.get("reason") != "reviewed":
+            await ctx.step.send_event(
+                "message-ready",
+                inngest.Event(
+                    name="message/ready",
+                    id=f"message-ready-{result['message_id']}",
+                    data={
+                        "message_id": result["message_id"],
+                        "user_id": result.get("user_id"),
+                    },
+                ),
+            )
+        if not result.get("ok") and not result.get("skip"):
+            raise inngest.NonRetriableError(str(result.get("reason") or "understand_failed"))
+        return result
+    except inngest.NonRetriableError:
+        await ctx.step.run("mark-failed", mark_ai_failed, message_id, ctx.run_id, "understand_failed")
+        raise
+
+
+@inngest_client.create_function(
+    fn_id="ai-classify",
+    name="ai/classify",
+    trigger=inngest.TriggerEvent(event="message/ready"),
+    retries=3,
+    concurrency=[
+        inngest.Concurrency(limit=2, key="event.data.user_id"),
+        inngest.Concurrency(limit=4),
+    ],
+    idempotency="event.data.message_id + '-classify'",
+)
+async def ai_classify(ctx: inngest.Context) -> dict:
+    message_id = str(ctx.event.data["message_id"])
+    try:
+        result = await ctx.step.run("classify-message", classify_message, message_id, ctx.run_id)
+        if result.get("ok") and result.get("message_id") and result.get("reason") != "reviewed":
+            await ctx.step.send_event(
+                "message-classified",
+                inngest.Event(
+                    name="message/classified",
+                    id=f"message-classified-{result['message_id']}",
+                    data={
+                        "message_id": result["message_id"],
+                        "user_id": result.get("user_id"),
+                        "categories": result.get("categories") or [],
+                    },
+                ),
+            )
+        if not result.get("ok") and not result.get("skip"):
+            raise inngest.NonRetriableError(str(result.get("reason") or "classify_failed"))
+        return result
+    except inngest.NonRetriableError:
+        await ctx.step.run("mark-failed", mark_ai_failed, message_id, ctx.run_id, "classify_failed")
+        raise
+
+
+@inngest_client.create_function(
+    fn_id="ai-extract",
+    name="ai/extract",
+    trigger=inngest.TriggerEvent(event="message/classified"),
+    retries=3,
+    concurrency=[
+        inngest.Concurrency(limit=2, key="event.data.user_id"),
+        inngest.Concurrency(limit=4),
+    ],
+    idempotency="event.data.message_id + '-extract'",
+)
+async def ai_extract(ctx: inngest.Context) -> dict:
+    message_id = str(ctx.event.data["message_id"])
+    try:
+        result = await ctx.step.run("extract-facts", extract_facts, message_id, ctx.run_id)
+        if not result.get("ok") and not result.get("skip"):
+            raise inngest.NonRetriableError(str(result.get("reason") or "extract_failed"))
+        return result
+    except inngest.NonRetriableError:
+        await ctx.step.run("mark-failed", mark_ai_failed, message_id, ctx.run_id, "extract_failed")
+        raise
+
+
+INNGEST_FUNCTIONS = [
+    gmail_sync,
+    gmail_sync_mailbox,
+    email_ingest,
+    pdf_process,
+    ai_understand,
+    ai_classify,
+    ai_extract,
+]

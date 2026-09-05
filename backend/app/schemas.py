@@ -142,6 +142,23 @@ class PdfPagesOut(BaseModel):
     pages: list[PdfPageOut]
 
 
+class ClassificationOut(BaseModel):
+    category: str
+    confidence: float
+    reason: str
+
+
+class ExtractedFieldOut(BaseModel):
+    field: str
+    value: str
+    confidence: float
+    source_type: str | None = None
+    source_id: str | None = None
+    source_quote: str | None = None
+    source_page: int | None = None
+    source_ref: str | None = None
+
+
 class QueueItemOut(BaseModel):
     id: str
     sender: str
@@ -151,6 +168,10 @@ class QueueItemOut(BaseModel):
     snippet: str = ""
     pdf_count: int = 0
     skipped_attachment_count: int = 0
+    summary: str | None = None
+    relevant: bool | None = None
+    needs_human_review: bool = False
+    classifications: list[ClassificationOut] = []
 
 
 class QueueListOut(BaseModel):
@@ -166,3 +187,7 @@ class QueueDetailOut(QueueItemOut):
     body_html: str | None = None
     gmail_message_id: str | None = None
     attachments: list[QueueAttachmentOut]
+    extracted_fields: list[ExtractedFieldOut] = []
+    relevance_reason: str | None = None
+    ai_model: str | None = None
+    ai_prompt_version: str | None = None

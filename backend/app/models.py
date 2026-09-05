@@ -110,6 +110,13 @@ class Message(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False, default="")
     body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    relevant: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    relevance_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    needs_human_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    ai_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    ai_prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ai_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -199,7 +206,11 @@ class Classification(Base):
     category: Mapped[str] = mapped_column(String(64), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("message_id", "category", name="uq_classifications_message_category"),)
 
     message: Mapped[Message] = relationship(back_populates="classifications")
 
@@ -218,7 +229,12 @@ class ExtractedField(Base):
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("message_id", "field", name="uq_extracted_fields_message_field"),)
 
     message: Mapped[Message] = relationship(back_populates="extracted_fields")
 

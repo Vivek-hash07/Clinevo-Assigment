@@ -690,8 +690,8 @@ def finalize_pdf_attachment(attachment_id: str, inngest_run_id: str | None = Non
             if mime.startswith("application/pdf") or item.filename.lower().endswith(".pdf"):
                 still_open.append(item)
         emit = not still_open
-        if emit and message is not None and message.status == STATUS_PROCESSING:
-            message.status = STATUS_PENDING
+        if emit and message is not None and message.status == STATUS_PENDING:
+            message.status = STATUS_PROCESSING
         write_audit(
             db,
             "pdf.processed",

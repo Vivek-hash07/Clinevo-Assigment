@@ -6,7 +6,7 @@ from sqlalchemy.sql.schema import Column
 
 from app.database import Base, engine
 
-MIGRATION_VERSION = 7
+MIGRATION_VERSION = 8
 
 
 def _default_clause(column: Column) -> str:
@@ -145,6 +145,32 @@ def ensure_schema() -> None:
         )
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_status ON messages (status)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_user_id ON messages (user_id)"))
+        conn.execute(
+            text(
+                "DELETE FROM classifications a USING classifications b "
+                "WHERE a.message_id = b.message_id AND a.category = b.category "
+                "AND (a.created_at < b.created_at OR (a.created_at = b.created_at AND a.id < b.id))"
+            )
+        )
+        conn.execute(
+            text(
+                "DELETE FROM extracted_fields a USING extracted_fields b "
+                "WHERE a.message_id = b.message_id AND a.field = b.field "
+                "AND (a.created_at < b.created_at OR (a.created_at = b.created_at AND a.id < b.id))"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_classifications_message_category "
+                "ON classifications (message_id, category)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_extracted_fields_message_field "
+                "ON extracted_fields (message_id, field)"
+            )
+        )
         conn.execute(
             text(
                 "UPDATE gmail_credentials SET sync_enabled = true "

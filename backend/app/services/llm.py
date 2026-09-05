@@ -70,6 +70,8 @@ class OpenRouterClient:
         temperature: float = 0.0,
         max_tokens: int = 4000,
         timeout: float | None = None,
+        json_schema: dict[str, Any] | None = None,
+        schema_name: str = "result",
     ) -> LlmCompletion:
         if not self.available:
             raise LlmError("OPENROUTER_API_KEY is not set", retryable=False)
@@ -79,7 +81,7 @@ class OpenRouterClient:
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"},
+            "response_format": self._response_format(json_schema, schema_name),
         }
         headers = {
             "Authorization": f"Bearer {self.settings.openrouter_api_key}",
@@ -92,7 +94,17 @@ class OpenRouterClient:
         url = self.settings.openrouter_base_url.rstrip("/") + "/chat/completions"
         timeout_s = timeout if timeout is not None else float(self.settings.openrouter_timeout_seconds)
         started = time.monotonic()
-        body = self._post(url, headers, payload, timeout_s)
+        try:
+            body = self._post(url, headers, payload, timeout_s)
+        except LlmError as exc:
+            if json_schema and self._should_fallback_json_object(exc):
+                logger.warning("Structured json_schema unsupported; falling back to json_object")
+                payload = dict(payload)
+                payload["response_format"] = {"type": "json_object"}
+                payload["messages"] = self._with_schema_hint(messages, json_schema, schema_name)
+                body = self._post(url, headers, payload, timeout_s)
+            else:
+                raise
         latency_ms = int((time.monotonic() - started) * 1000)
         content = (((body.get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
         usage_raw = body.get("usage") or {}
@@ -112,6 +124,41 @@ class OpenRouterClient:
             latency_ms=latency_ms,
             raw_text=content if isinstance(content, str) else json.dumps(content),
         )
+
+    @staticmethod
+    def _response_format(json_schema: dict[str, Any] | None, schema_name: str) -> dict[str, Any]:
+        if not json_schema:
+            return {"type": "json_object"}
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name[:64],
+                "strict": True,
+                "schema": json_schema,
+            },
+        }
+
+    @staticmethod
+    def _should_fallback_json_object(exc: LlmError) -> bool:
+        if exc.status_code not in {400, 404, 422}:
+            return False
+        text = str(exc).lower()
+        needles = ("json_schema", "response_format", "structured", "strict")
+        return any(part in text for part in needles)
+
+    @staticmethod
+    def _with_schema_hint(
+        messages: list[dict[str, Any]],
+        json_schema: dict[str, Any],
+        schema_name: str,
+    ) -> list[dict[str, Any]]:
+        hint = (
+            f"Your JSON must match schema '{schema_name}' exactly. "
+            f"Schema: {json.dumps(json_schema, ensure_ascii=False)}"
+        )
+        cloned = [dict(item) for item in messages]
+        cloned.append({"role": "user", "content": hint})
+        return cloned
 
     def _post(
         self,

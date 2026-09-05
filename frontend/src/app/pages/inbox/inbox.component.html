@@ -85,6 +85,13 @@
               @if (item.snippet) {
                 <p class="muted snippet">{{ item.snippet }}</p>
               }
+              @if (item.classifications?.length) {
+                <p class="cat-row">
+                  @for (label of item.classifications; track label.category) {
+                    <span class="cat-chip">{{ label.category }}</span>
+                  }
+                </p>
+              }
               <p class="muted meta">
                 {{ item.pdf_count }} PDF
                 @if (item.skipped_attachment_count) {

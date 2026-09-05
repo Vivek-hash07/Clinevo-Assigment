@@ -100,6 +100,12 @@ class Settings(BaseSettings):
     ocr_confidence_threshold: float = 0.72
     llm_hallucination_overlap_min: float = 0.18
 
+    ai_pack_max_chars: int = 60_000
+    ai_email_max_chars: int = 20_000
+    ai_page_max_chars: int = 8_000
+    ai_classify_min_confidence: float = 0.35
+    ai_quote_min_chars: int = 8
+
 
 @lru_cache
 def get_settings() -> Settings:

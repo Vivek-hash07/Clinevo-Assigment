@@ -1,54 +1,189 @@
-"""LLM prompt templates used by classify / extract (wired when those jobs run)."""
+"""Versioned LLM prompt templates. IDs match constants (classify_v1, extract_icsr_v1, …)."""
 
-CLASSIFY_V1 = """You classify a healthcare mailbox message (email body plus all PDF text) into one or more of:
+from app.ai_contracts import UNKNOWN_OVER_GUESSING, field_catalog_lines
+from app.constants import (
+    CAT_ICSR,
+    CAT_IRRELEVANT,
+    CAT_MI,
+    CAT_PQC,
+    ICSR_FIELDS,
+    MI_FIELDS,
+    NOT_STATED,
+    PQC_FIELDS,
+)
 
-- Safety Report (ICSR)
-- Quality Complaint (PQC)
-- Info Request (MI)
-- Not Relevant
 
-A message may have more than one label. Never force a single category.
+def fill_prompt(template: str, **fields: str) -> str:
+    filled = template
+    for key, value in fields.items():
+        filled = filled.replace("{" + key + "}", value)
+    return filled
+
+
+CLASSIFY_V1 = f"""Prompt version: classify_v1
+
+Classify the WHOLE mailbox message (email body plus every PDF page in the pack) into the four
+categories below. This is multi-label: a message may belong to more than one category at the same
+time. Never force a single label. Decide each category independently.
+
+Categories:
+- {CAT_ICSR}: a person had a suspected adverse reaction / bad outcome involving a product (patient +
+  product + event, even loosely).
+- {CAT_PQC}: something is physically wrong with the product (broken seal, wrong color, contamination,
+  damaged packaging, counterfeit, missing tablets).
+- {CAT_MI}: a question about a product (dosing, how to take it, interactions) with no reaction and
+  no product defect.
+- {CAT_IRRELEVANT}: marketing, spam, internal admin, or anything that is none of the above.
+
+Return JSON only with this shape:
+{{
+  "classifications": [
+    {{ "category": "{CAT_ICSR}", "applies": true, "confidence": 0.0, "reason": "one line" }},
+    {{ "category": "{CAT_PQC}", "applies": false, "confidence": 0.0, "reason": "one line" }},
+    {{ "category": "{CAT_MI}", "applies": false, "confidence": 0.0, "reason": "one line" }},
+    {{ "category": "{CAT_IRRELEVANT}", "applies": false, "confidence": 0.0, "reason": "one line" }}
+  ]
+}}
+
+Rules:
+- Include exactly one object for each of the four categories.
+- applies=true only when the source supports that category. Do not guess.
+- reason must be one sentence pointing at evidence in the pack (or stating that none exists).
+- If any of ICSR / PQC / MI applies, Not Relevant must have applies=false.
+- If none of ICSR / PQC / MI applies, Not Relevant must have applies=true.
+- {UNKNOWN_OVER_GUESSING}
+
+Message pack:
+{{pack}}
+"""
+
+EXTRACT_ICSR_V1 = f"""Prompt version: extract_icsr_v1
+
+Extract ICSR (safety report) fields from the WHOLE message pack. Return every field in the catalog,
+even when missing.
+
+Field catalog:
+{field_catalog_lines(ICSR_FIELDS)}
 
 Return JSON only:
-{
-  "classifications": [
-    { "category": "Safety Report (ICSR)", "confidence": 0.0, "reason": "one line" }
+{{
+  "fields": [
+    {{
+      "field": "patient.age",
+      "value": "{NOT_STATED}",
+      "confidence": 0.0,
+      "source_ref": "email:MESSAGE_ID",
+      "quote": ""
+    }}
   ]
-}
+}}
 
-If a fact is not in the source, do not invent it. Prefer unknown over guessing.
+Rules:
+- One object per catalog field. Do not add extra fields. Do not omit any catalog field.
+- value is a short string copied or faithfully condensed from the source. If it is not in the source,
+  value MUST be "{NOT_STATED}" and confidence MUST be 0.0 and quote MUST be "".
+- quote is a verbatim excerpt from the cited source_ref. Empty when value is "{NOT_STATED}".
+- source_ref must be one of the refs in the pack (email:… or pdf:…:page:…).
+- narrative.summary is a short case narrative using ONLY facts that appear in the pack. If the pack
+  is too thin, say so inside the narrative; still do not invent.
+- {UNKNOWN_OVER_GUESSING}
+
+Message pack:
+{{pack}}
 """
 
-EXTRACT_ICSR_V1 = """Extract ICSR (safety report) fields from the whole message.
+EXTRACT_PQC_V1 = f"""Prompt version: extract_pqc_v1
 
-Groups: patient, reporter, product, reaction, severity, narrative.
+Extract quality complaint (PQC) fields from the WHOLE message pack. Return every catalog field.
 
-Every field:
-{
-  "field": "patient.age",
-  "value": "Not stated",
-  "confidence": 0.0,
-  "source": { "type": "email", "id": "...", "quote": "..." }
-}
+Field catalog:
+{field_catalog_lines(PQC_FIELDS)}
 
-Missing facts must be "Not stated". Never invent. Unknown over guessing.
+- pqc.product: product name.
+- pqc.batch_lot: batch / lot / serial if stated.
+- pqc.defect: what is physically wrong.
+- pqc.photo_mentioned: "yes" or "no" only if the source says a photo exists or does not; otherwise
+  "{NOT_STATED}".
+
+Return JSON only:
+{{
+  "fields": [
+    {{
+      "field": "pqc.product",
+      "value": "{NOT_STATED}",
+      "confidence": 0.0,
+      "source_ref": "email:MESSAGE_ID",
+      "quote": ""
+    }}
+  ]
+}}
+
+Rules:
+- One object per catalog field. Never invent batch/lot numbers.
+- Missing facts MUST be "{NOT_STATED}" with confidence 0.0 and an empty quote.
+- {UNKNOWN_OVER_GUESSING}
+
+Message pack:
+{{pack}}
 """
 
-EXTRACT_PQC_V1 = """Extract quality complaint (PQC) fields: product, batch/lot, defect description, photo mentioned.
+EXTRACT_MI_V1 = f"""Prompt version: extract_mi_v1
 
-Missing facts must be "Not stated". Cite email or PDF page. Never invent.
+Extract medical-information (MI) request fields from the WHOLE message pack. Return every catalog field.
+
+Field catalog:
+{field_catalog_lines(MI_FIELDS)}
+
+- mi.questions: the actual question(s) asked.
+- mi.product: product the question is about.
+- mi.topic: short topic label (dose, interaction, administration, storage, other) if stated.
+
+Return JSON only:
+{{
+  "fields": [
+    {{
+      "field": "mi.questions",
+      "value": "{NOT_STATED}",
+      "confidence": 0.0,
+      "source_ref": "email:MESSAGE_ID",
+      "quote": ""
+    }}
+  ]
+}}
+
+Rules:
+- One object per catalog field.
+- Missing facts MUST be "{NOT_STATED}" with confidence 0.0 and an empty quote.
+- {UNKNOWN_OVER_GUESSING}
+
+Message pack:
+{{pack}}
 """
 
-EXTRACT_MI_V1 = """Extract medical information (MI) questions and the product / topic they refer to.
+UNDERSTAND_V1 = f"""Prompt version: understand_v1
 
-Missing facts must be "Not stated". Cite email or PDF page. Never invent.
-"""
+Write a reviewer summary of this mailbox message and its PDFs.
 
-UNDERSTAND_V1 = """Write a 10–15 sentence reviewer summary of this message and its PDFs.
+Return JSON only:
+{{
+  "summary": "10 to 15 sentences",
+  "relevant": true,
+  "relevance_reason": "one line",
+  "needs_human_review": false,
+  "review_reasons": []
+}}
 
-Say whether it looks relevant to patient safety, product quality, or a product question, and why.
+Rules:
+- summary is 10–15 sentences covering sender intent, what the attachments add, and whether this looks
+  like a safety report, quality complaint, product question, or none of those — and why.
+- relevant is true if the message is plausibly ICSR, PQC, or MI.
+- needs_human_review is true when OCR is weak, handwriting is present, language is mixed, evidence
+  conflicts, or you had to leave important facts unknown.
+- Do not invent facts. If something is unclear, say so in the summary.
+- {UNKNOWN_OVER_GUESSING}
 
-Do not invent facts. If something is unclear, say so.
+Message pack:
+{{pack}}
 """
 
 PDF_STEP1_JSON_SHAPE = """
@@ -116,3 +251,11 @@ Local OCR transcript (confidence={ocr_confidence}):
 Local tables JSON:
 {local_tables}
 """ + PDF_STEP1_JSON_SHAPE
+
+PROMPT_TEMPLATES = {
+    "understand_v1": UNDERSTAND_V1,
+    "classify_v1": CLASSIFY_V1,
+    "extract_icsr_v1": EXTRACT_ICSR_V1,
+    "extract_pqc_v1": EXTRACT_PQC_V1,
+    "extract_mi_v1": EXTRACT_MI_V1,
+}

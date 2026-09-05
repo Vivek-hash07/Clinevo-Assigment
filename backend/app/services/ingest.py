@@ -216,7 +216,7 @@ def ingest_gmail_message(user_id: str, gmail_message_id: str, inngest_run_id: st
         _apply_parsed_message(db, message, parsed, settings)
         stored, skipped = _persist_attachments(db, client, message, parsed, settings)
         payload = _pdf_attachment_payload(message)
-        message.status = STATUS_PROCESSING if payload else STATUS_PENDING
+        message.status = STATUS_PROCESSING
         finished = datetime.now(UTC)
         run.message_id = message.id
         run.finished_at = finished
