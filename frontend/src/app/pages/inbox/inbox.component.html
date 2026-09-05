@@ -27,8 +27,8 @@
       <div>
         <h1>Reviewer queue</h1>
         <p class="muted">
-          Mail is pulled from Gmail in the background. Status moves from pending to processing, then
-          ready for review.
+          Open a ready case to read the email, inspect the PDF, and accept or override extracted
+          facts. Every action is timestamped.
         </p>
       </div>
       <div class="status-pill" [class.on]="auth.user()?.gmail_connected">
@@ -61,9 +61,21 @@
     </nav>
 
     @if (loading()) {
-      <p class="muted">Loading queue…</p>
+      <div class="empty state-card" role="status">
+        <p class="eyebrow">Queue</p>
+        <h2>Loading messages…</h2>
+        <p class="muted">Fetching the latest classifications and pipeline timings.</p>
+      </div>
+    } @else if (loadError()) {
+      <div class="empty state-card error-card" role="alert">
+        <p class="eyebrow">Could not load</p>
+        <h2>The reviewer queue is unavailable</h2>
+        <p>{{ loadError() }}</p>
+        <button type="button" class="btn primary" (click)="refresh()">Try again</button>
+      </div>
     } @else if (items().length === 0) {
-      <div class="empty">
+      <div class="empty state-card">
+        <p class="eyebrow">Nothing here</p>
         <h2>No messages in this view</h2>
         <p>
           Connect Gmail, send the synthetic samples, then sync. Intake stores sender, subject, date,
@@ -74,32 +86,57 @@
       <ul class="queue">
         @for (item of items(); track item.id) {
           <li>
-            <div>
-              <strong>{{ item.subject || '(no subject)' }}</strong>
-              <p class="muted">
-                {{ item.sender }}
-                @if (item.sent_at) {
-                  · {{ item.sent_at | date: 'medium' }}
-                }
-              </p>
-              @if (item.snippet) {
-                <p class="muted snippet">{{ item.snippet }}</p>
-              }
-              @if (item.classifications?.length) {
-                <p class="cat-row">
-                  @for (label of item.classifications; track label.category) {
-                    <span class="cat-chip">{{ label.category }}</span>
+            <a class="queue-link" [routerLink]="['/inbox', item.id]">
+              <div class="queue-main">
+                <div class="queue-title-row">
+                  <strong>{{ item.subject || '(no subject)' }}</strong>
+                  @if (item.needs_human_review) {
+                    <span class="flag">Needs review</span>
+                  }
+                </div>
+                <p class="muted">
+                  {{ item.sender }}
+                  @if (item.sent_at) {
+                    · {{ item.sent_at | date: 'medium' }}
                   }
                 </p>
-              }
-              <p class="muted meta">
-                {{ item.pdf_count }} PDF
-                @if (item.skipped_attachment_count) {
-                  · {{ item.skipped_attachment_count }} skipped
+                @if (summaryLine(item)) {
+                  <p class="muted snippet">{{ summaryLine(item) }}</p>
                 }
-              </p>
-            </div>
-            <span class="chip" [attr.data-status]="item.status">{{ item.status }}</span>
+                @if (item.classifications?.length) {
+                  <p class="cat-row">
+                    @for (label of item.classifications; track label.category) {
+                      <span
+                        class="cat-chip"
+                        [attr.data-cat]="chip(label).key"
+                        [attr.data-tone]="tone(label)"
+                        [title]="label.reason || label.category"
+                      >
+                        {{ chip(label).short }}
+                        <em>{{ confidence(label) }}</em>
+                      </span>
+                    }
+                  </p>
+                } @else if (item.status === 'processing') {
+                  <p class="muted meta">Classifying…</p>
+                }
+                <p class="muted meta">
+                  {{ item.pdf_count }} PDF
+                  @if (item.skipped_attachment_count) {
+                    · {{ item.skipped_attachment_count }} skipped
+                  }
+                  @if (duration(item)) {
+                    · {{ duration(item) }}
+                  }
+                  @if (item.last_error) {
+                    · <span class="err-inline">{{ item.last_error }}</span>
+                  }
+                </p>
+              </div>
+              <span class="chip" [attr.data-status]="item.last_error && item.status !== 'reviewed' ? 'error' : item.status">
+                {{ item.last_error && item.status !== 'reviewed' ? 'error' : item.status }}
+              </span>
+            </a>
           </li>
         }
       </ul>

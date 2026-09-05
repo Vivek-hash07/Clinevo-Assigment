@@ -1,0 +1,369 @@
+<div class="app-shell review-shell">
+  <header class="topbar">
+    <div class="brand-row">
+      <a routerLink="/inbox" class="back-link">← Queue</a>
+      <div>
+        <p class="eyebrow">Reviewer</p>
+        <strong>{{ detail()?.subject || 'Message' }}</strong>
+      </div>
+    </div>
+    <div class="top-actions">
+      @if (detail(); as item) {
+        <span class="chip" [attr.data-status]="item.last_error && item.status !== 'reviewed' ? 'error' : item.status">
+          {{ item.last_error && item.status !== 'reviewed' ? 'error' : item.status }}
+        </span>
+        @if (item.can_review && item.status !== 'reviewed') {
+          <button type="button" class="btn primary" (click)="complete()" [disabled]="saving()">
+            {{ saving() ? 'Saving…' : 'Accept remaining & complete' }}
+          </button>
+        }
+      }
+      <div class="who">
+        <span>{{ auth.user()?.name || auth.user()?.email }}</span>
+        <button type="button" class="linkish" (click)="auth.logout()">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="review">
+    @if (loading()) {
+      <div class="empty state-card" role="status">
+        <p class="eyebrow">Case</p>
+        <h2>Loading the review workspace…</h2>
+        <p class="muted">Pulling the email, PDF, extracted fields, and audit trail.</p>
+      </div>
+    } @else if (loadError()) {
+      <div class="empty state-card error-card" role="alert">
+        <p class="eyebrow">Could not load</p>
+        <h2>This message is unavailable</h2>
+        <p>{{ loadError() }}</p>
+        <button type="button" class="btn primary" (click)="load()">Try again</button>
+      </div>
+    } @else {
+      @if (detail(); as item) {
+      @if (notice()) {
+        <div class="banner" [class.error]="noticeKind() === 'warn'" [class.ok]="noticeKind() === 'ok'">
+          {{ notice() }}
+        </div>
+      }
+
+      @if (item.status === 'processing' || item.status === 'pending') {
+        <div class="banner warn" role="status">
+          @if (item.last_error) {
+            Pipeline error: {{ item.last_error }}
+          } @else if (item.status === 'processing') {
+            AI is still working on this message. Fields will appear when extraction finishes.
+          } @else {
+            This message is queued. Sync mail if it stays pending.
+          }
+        </div>
+      }
+
+      <section class="review-meta">
+        <div>
+          <p class="muted sender-line">
+            {{ item.sender }}
+            @if (item.sent_at) {
+              · {{ item.sent_at | date: 'medium' }}
+            }
+          </p>
+          @if (item.classifications?.length) {
+            <p class="cat-row">
+              @for (label of item.classifications; track label.category) {
+                <span
+                  class="cat-chip"
+                  [attr.data-cat]="chip(label.category).key"
+                  [attr.data-tone]="tone(label.confidence)"
+                  [title]="label.reason"
+                >
+                  {{ chip(label.category).short }}
+                  <em>{{ confidence(label.confidence) }}</em>
+                </span>
+              }
+            </p>
+          }
+        </div>
+        <dl class="meta-grid">
+          <div>
+            <dt>Duration</dt>
+            <dd>{{ duration(item.duration_ms) || '—' }}</dd>
+          </div>
+          <div>
+            <dt>Model</dt>
+            <dd>{{ item.ai_model || '—' }}</dd>
+          </div>
+          <div>
+            <dt>Prompt</dt>
+            <dd>{{ item.ai_prompt_version || '—' }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <div class="review-workspace">
+        <div class="review-source">
+          <article class="panel" id="email-cite">
+            <header class="panel-head">
+              <h2>Email</h2>
+              @if (highlightTarget() === 'email') {
+                <span class="flag">Source highlighted</span>
+              }
+            </header>
+            @if (item.body) {
+              <div class="email-body">
+                @for (span of emailSpans(); track $index) {
+                  @if (span.hit) {
+                    <mark class="source-hit">{{ span.text }}</mark>
+                  } @else {
+                    <span>{{ span.text }}</span>
+                  }
+                }
+              </div>
+            } @else {
+              <div class="empty-inline">
+                <p>No email body was stored for this message.</p>
+              </div>
+            }
+          </article>
+
+          <article class="panel" id="pdf-cite">
+            <header class="panel-head">
+              <h2>PDF</h2>
+              @if (selectedPdf(); as pdf) {
+                <span class="muted">{{ pdf.filename }}</span>
+              }
+            </header>
+
+            @if (pdfs().length > 1) {
+              <div class="pdf-tabs" role="tablist">
+                @for (pdf of pdfs(); track pdf.id) {
+                  <button
+                    type="button"
+                    [class.active]="selectedPdfId() === pdf.id"
+                    (click)="selectPdf(pdf)"
+                  >
+                    {{ pdf.filename }}
+                  </button>
+                }
+              </div>
+            }
+
+            @if (!pdfs().length) {
+              <div class="empty-inline">
+                <p>No PDF attachments on this message.</p>
+                @if (skipped().length) {
+                  <p class="muted">
+                    Skipped:
+                    @for (file of skipped(); track file.id) {
+                      {{ file.filename }}{{ $last ? '' : ', ' }}
+                    }
+                  </p>
+                }
+              </div>
+            } @else {
+              @if (selectedPdf(); as pdf) {
+                <div class="pdf-toolbar">
+                  <button type="button" class="btn ghost" (click)="setPage(page() - 1)" [disabled]="page() <= 1">
+                    Previous
+                  </button>
+                  <span>Page {{ page() }} of {{ pageCount() }}</span>
+                  <button
+                    type="button"
+                    class="btn ghost"
+                    (click)="setPage(page() + 1)"
+                    [disabled]="page() >= pageCount()"
+                  >
+                    Next
+                  </button>
+                  @if (pdf.document_flavor) {
+                    <span class="muted">{{ pdf.document_flavor }}</span>
+                  }
+                  @if (currentPage()?.ocr_confidence != null) {
+                    <span class="muted">OCR {{ confidence(currentPage()?.ocr_confidence) }}</span>
+                  }
+                  @if (duration(pdf.duration_ms)) {
+                    <span class="muted">{{ duration(pdf.duration_ms) }}</span>
+                  }
+                </div>
+                @if (pdf.extract_error) {
+                  <div class="banner error">{{ pdf.extract_error }}</div>
+                }
+                @if (highlightTarget() === 'pdf' && highlightQuote()) {
+                  <p class="cite-banner">Cited: {{ highlightQuote() }}</p>
+                }
+                @if (pdfLoading()) {
+                  <p class="muted">Loading PDF…</p>
+                }
+                @if (pdfUrl()) {
+                  <iframe class="pdf-frame" [src]="pdfUrl()" title="PDF attachment"></iframe>
+                } @else if (pdfMissing()) {
+                  <p class="muted">The original file is not stored. Showing extracted page text instead.</p>
+                }
+                @if (currentPage(); as pageRow) {
+                  <div class="page-text">
+                    <p class="eyebrow">Page text</p>
+                    <div class="email-body compact">
+                      @for (span of pageSpans(); track $index) {
+                        @if (span.hit) {
+                          <mark class="source-hit">{{ span.text }}</mark>
+                        } @else {
+                          <span>{{ span.text }}</span>
+                        }
+                      }
+                    </div>
+                  </div>
+                }
+              }
+            }
+          </article>
+        </div>
+
+        <aside class="review-side">
+          <article class="panel">
+            <header class="panel-head">
+              <h2>AI summary</h2>
+              @if (item.relevant === false) {
+                <span class="flag muted-flag">Not relevant</span>
+              }
+            </header>
+            @if (item.summary) {
+              <p class="summary-text">{{ item.summary }}</p>
+              @if (item.relevance_reason) {
+                <p class="muted meta">{{ item.relevance_reason }}</p>
+              }
+            } @else if (item.status === 'processing' || item.status === 'pending') {
+              <p class="muted">Summary will appear after the understand step.</p>
+            } @else {
+              <p class="muted">No summary was stored.</p>
+            }
+          </article>
+
+          <article class="panel">
+            <header class="panel-head">
+              <h2>Extracted fields</h2>
+              @if (item.status === 'reviewed') {
+                <span class="flag">Reviewed</span>
+              }
+            </header>
+
+            @if (!item.field_groups.length) {
+              <div class="empty-inline">
+                @if (item.status === 'processing' || item.status === 'pending') {
+                  <p>Waiting for extraction.</p>
+                } @else {
+                  <p>No structured fields for this classification.</p>
+                }
+              </div>
+            } @else {
+              @for (group of item.field_groups; track group.id) {
+                <section class="field-group">
+                  <h3>{{ group.title }}</h3>
+                  @for (field of group.fields; track field.id) {
+                    <div class="field-row" [class.editing]="editingField() === field.field">
+                      <div class="field-head">
+                        <strong>{{ field.label }}</strong>
+                        <span class="conf" [attr.data-tone]="tone(field.confidence)">
+                          {{ confidence(field.confidence) }}
+                        </span>
+                        @if (field.review_action) {
+                          <span class="lock-chip">{{ field.review_action }}</span>
+                        }
+                      </div>
+
+                      @if (editingField() === field.field) {
+                        <label>
+                          New value
+                          <textarea rows="3" [(ngModel)]="draftValue" [disabled]="saving()"></textarea>
+                        </label>
+                        <label>
+                          Override reason
+                          <textarea
+                            rows="2"
+                            [(ngModel)]="draftReason"
+                            [disabled]="saving()"
+                            placeholder="Required — why the AI value is wrong"
+                          ></textarea>
+                        </label>
+                        @if (formError()) {
+                          <p class="field-error">{{ formError() }}</p>
+                        }
+                        <div class="field-actions">
+                          <button type="button" class="btn primary" (click)="saveOverride(field)" [disabled]="saving()">
+                            Save override
+                          </button>
+                          <button type="button" class="btn ghost" (click)="cancelOverride()" [disabled]="saving()">
+                            Cancel
+                          </button>
+                        </div>
+                      } @else {
+                        <p class="field-value" [class.not-stated]="field.value === 'Not stated'">
+                          {{ field.value }}
+                        </p>
+                        <div class="field-actions">
+                          @if (field.source_ref) {
+                            <button type="button" class="linkish" (click)="openSource(field)">
+                              {{ field.source_type === 'pdf' ? 'Highlight PDF page ' + (field.source_page || 1) : 'Highlight email' }}
+                            </button>
+                          }
+                          @if (item.can_review) {
+                            <button
+                              type="button"
+                              class="btn ghost"
+                              (click)="accept(field)"
+                              [disabled]="saving() || field.review_action === 'accept'"
+                            >
+                              Accept
+                            </button>
+                            <button type="button" class="btn ghost" (click)="startOverride(field)" [disabled]="saving()">
+                              Override
+                            </button>
+                          }
+                        </div>
+                        @if (field.source_quote) {
+                          <p class="muted quote">“{{ field.source_quote }}”</p>
+                        }
+                      }
+                    </div>
+                  }
+                </section>
+              }
+            }
+          </article>
+
+          <article class="panel">
+            <header class="panel-head">
+              <h2>Audit trail</h2>
+            </header>
+            @if (!item.audit_events.length && !item.pipeline_runs.length) {
+              <p class="muted">No timestamped actions yet.</p>
+            } @else {
+              <ol class="audit">
+                @for (run of item.pipeline_runs; track run.id) {
+                  <li>
+                    <time>{{ (run.started_at || run.finished_at) | date: 'medium' }}</time>
+                    <strong>{{ run.function_name }}</strong>
+                    <span class="muted">
+                      {{ run.status }}
+                      @if (duration(run.duration_ms)) {
+                        · {{ duration(run.duration_ms) }}
+                      }
+                    </span>
+                  </li>
+                }
+                @for (event of item.audit_events; track event.id) {
+                  <li>
+                    <time>{{ event.created_at | date: 'medium' }}</time>
+                    <strong>{{ eventLabel(event) }}</strong>
+                    @if (eventDetail(event)) {
+                      <span class="muted">{{ eventDetail(event) }}</span>
+                    }
+                  </li>
+                }
+              </ol>
+            }
+          </article>
+        </aside>
+      </div>
+      }
+    }
+  </main>
+</div>

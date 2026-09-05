@@ -80,4 +80,44 @@ MI_FIELDS = (
     "mi.topic",
 )
 DERIVED_FIELDS = frozenset({"narrative.summary"})
-REVIEW_LOCK_ACTIONS = frozenset({"accept", "override"})
+REVIEW_ACTION_ACCEPT = "accept"
+REVIEW_ACTION_OVERRIDE = "override"
+REVIEW_ACTION_COMPLETE = "complete"
+REVIEW_LOCK_ACTIONS = frozenset({REVIEW_ACTION_ACCEPT, REVIEW_ACTION_OVERRIDE})
+OVERRIDE_REASON_MIN_CHARS = 8
+REVIEW_VALUE_MAX_CHARS = 8000
+REVIEW_REASON_MAX_CHARS = 2000
+
+FIELD_GROUPS = (
+    ("icsr", CAT_ICSR, ICSR_FIELDS),
+    ("pqc", CAT_PQC, PQC_FIELDS),
+    ("mi", CAT_MI, MI_FIELDS),
+)
+
+FIELD_LABELS = {
+    "patient.age": "Patient age",
+    "patient.sex": "Patient sex",
+    "patient.weight": "Patient weight",
+    "patient.height": "Patient height",
+    "patient.history": "Relevant history",
+    "reporter.name": "Reporter",
+    "reporter.role": "Reporter role",
+    "reporter.country": "Reporter country",
+    "product.name": "Product",
+    "product.dose": "Dose",
+    "product.route": "Route",
+    "product.start_date": "Start date",
+    "product.stop_date": "Stop date",
+    "reaction.description": "Reaction",
+    "reaction.onset": "Onset",
+    "reaction.outcome": "Outcome",
+    "severity.seriousness": "Seriousness",
+    "narrative.summary": "Case narrative",
+    "pqc.product": "Product",
+    "pqc.batch_lot": "Batch / lot",
+    "pqc.defect": "Defect",
+    "pqc.photo_mentioned": "Photo mentioned",
+    "mi.questions": "Question(s)",
+    "mi.product": "Product",
+    "mi.topic": "Topic",
+}

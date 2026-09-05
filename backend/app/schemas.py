@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -109,6 +110,7 @@ class QueueAttachmentOut(BaseModel):
     document_flavor: str | None = None
     duration_ms: int | None = None
     extract_error: str | None = None
+    has_file: bool = False
 
 
 class PdfPageOut(BaseModel):
@@ -149,7 +151,9 @@ class ClassificationOut(BaseModel):
 
 
 class ExtractedFieldOut(BaseModel):
+    id: str
     field: str
+    label: str
     value: str
     confidence: float
     source_type: str | None = None
@@ -157,6 +161,52 @@ class ExtractedFieldOut(BaseModel):
     source_quote: str | None = None
     source_page: int | None = None
     source_ref: str | None = None
+    locked: bool = False
+    review_action: str | None = None
+    review_reason: str | None = None
+    reviewed_at: str | None = None
+
+
+class ReviewOut(BaseModel):
+    id: str
+    action: str
+    field_name: str | None = None
+    old_value: str | None = None
+    new_value: str | None = None
+    reason: str | None = None
+    user_id: str | None = None
+    created_at: str
+
+
+class AuditEventOut(BaseModel):
+    id: str
+    event_type: str
+    payload: dict[str, Any] = {}
+    created_at: str
+
+
+class PipelineRunOut(BaseModel):
+    id: str
+    function_name: str
+    status: str
+    duration_ms: int | None = None
+    model: str | None = None
+    prompt_version: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+class FieldGroupOut(BaseModel):
+    id: str
+    title: str
+    fields: list[ExtractedFieldOut]
+
+
+class ReviewRequest(BaseModel):
+    action: Literal["accept", "override", "complete"]
+    field: str | None = Field(default=None, max_length=128)
+    value: str | None = Field(default=None, max_length=8000)
+    reason: str | None = Field(default=None, max_length=2000)
 
 
 class QueueItemOut(BaseModel):
@@ -172,6 +222,8 @@ class QueueItemOut(BaseModel):
     relevant: bool | None = None
     needs_human_review: bool = False
     classifications: list[ClassificationOut] = []
+    duration_ms: int | None = None
+    last_error: str | None = None
 
 
 class QueueListOut(BaseModel):
@@ -188,6 +240,12 @@ class QueueDetailOut(QueueItemOut):
     gmail_message_id: str | None = None
     attachments: list[QueueAttachmentOut]
     extracted_fields: list[ExtractedFieldOut] = []
+    field_groups: list[FieldGroupOut] = []
+    reviews: list[ReviewOut] = []
+    audit_events: list[AuditEventOut] = []
+    pipeline_runs: list[PipelineRunOut] = []
     relevance_reason: str | None = None
     ai_model: str | None = None
     ai_prompt_version: str | None = None
+    ai_completed_at: str | None = None
+    can_review: bool = False

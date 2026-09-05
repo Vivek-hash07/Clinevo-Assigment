@@ -30,5 +30,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/inbox/inbox.component').then((m) => m.InboxComponent),
   },
+  {
+    path: 'inbox/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/review/review.component').then((m) => m.ReviewComponent),
+  },
   { path: '**', redirectTo: 'inbox' },
 ];

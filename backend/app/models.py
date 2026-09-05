@@ -131,6 +131,7 @@ class Message(Base):
     extracted_fields: Mapped[list[ExtractedField]] = relationship(
         back_populates="message", cascade="all, delete-orphan"
     )
+    reviews: Mapped[list[Review]] = relationship(back_populates="message", cascade="all, delete-orphan")
 
 
 class Attachment(Base):
@@ -255,6 +256,8 @@ class Review(Base):
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    message: Mapped[Message] = relationship(back_populates="reviews")
 
 
 class AuditEvent(Base):

@@ -1,11 +1,19 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { Subscription, interval } from 'rxjs';
 
 import { AuthService } from '../../core/auth.service';
-import { QueueCounts, QueueItem } from '../../core/models';
+import { readHttpError } from '../../core/http-error';
+import { Classification, QueueCounts, QueueItem } from '../../core/models';
 import { QueueService } from '../../core/queue.service';
+import {
+  categoryChip,
+  confidenceTone,
+  formatConfidence,
+  formatDuration,
+} from '../../core/review.util';
 
 const EMPTY_COUNTS: QueueCounts = {
   pending: 0,
@@ -17,7 +25,7 @@ const EMPTY_COUNTS: QueueCounts = {
 
 @Component({
   selector: 'app-inbox',
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   templateUrl: './inbox.component.html',
 })
 export class InboxComponent implements OnInit, OnDestroy {
@@ -28,6 +36,7 @@ export class InboxComponent implements OnInit, OnDestroy {
   readonly counts = signal<QueueCounts>(EMPTY_COUNTS);
   readonly status = signal<string | null>(null);
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly syncing = signal(false);
   readonly seeding = signal(false);
   readonly notice = signal('');
@@ -49,17 +58,22 @@ export class InboxComponent implements OnInit, OnDestroy {
 
   setStatus(value: string | null): void {
     this.status.set(value);
+    this.loading.set(true);
     this.refresh();
   }
 
   refresh(): void {
+    this.loadError.set('');
     this.queue.list(this.status()).subscribe({
       next: (res) => {
         this.items.set(res.items);
         this.counts.set(res.counts);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: (err: HttpErrorResponse) => {
+        this.loading.set(false);
+        this.loadError.set(readHttpError(err, 'Could not load the reviewer queue.'));
+      },
     });
   }
 
@@ -85,7 +99,7 @@ export class InboxComponent implements OnInit, OnDestroy {
       error: (err: HttpErrorResponse) => {
         this.syncing.set(false);
         this.noticeKind.set('warn');
-        this.notice.set(this.readError(err, 'Could not queue mailbox sync. Is Inngest running?'));
+        this.notice.set(readHttpError(err, 'Could not queue mailbox sync. Is Inngest running?'));
       },
     });
   }
@@ -109,9 +123,30 @@ export class InboxComponent implements OnInit, OnDestroy {
       error: (err: HttpErrorResponse) => {
         this.seeding.set(false);
         this.noticeKind.set('warn');
-        this.notice.set(this.readError(err, 'Could not send sample emails.'));
+        this.notice.set(readHttpError(err, 'Could not send sample emails.'));
       },
     });
+  }
+
+  chip(label: Classification) {
+    return categoryChip(label.category);
+  }
+
+  confidence(label: Classification): string {
+    return formatConfidence(label.confidence);
+  }
+
+  tone(label: Classification): string {
+    return confidenceTone(label.confidence);
+  }
+
+  duration(item: QueueItem): string {
+    return formatDuration(item.duration_ms);
+  }
+
+  summaryLine(item: QueueItem): string {
+    const text = (item.summary || item.snippet || '').replace(/\s+/g, ' ').trim();
+    return text;
   }
 
   private watchQueue(): void {
@@ -122,10 +157,5 @@ export class InboxComponent implements OnInit, OnDestroy {
     this.refresh();
     this.poll = interval(2500).subscribe(() => this.refresh());
     this.pollTimer = window.setTimeout(() => this.poll?.unsubscribe(), 20000);
-  }
-
-  private readError(err: HttpErrorResponse, fallback: string): string {
-    const detail = err.error?.detail;
-    return typeof detail === 'string' ? detail : fallback;
   }
 }
