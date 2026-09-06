@@ -117,6 +117,16 @@ class Message(Base):
     ai_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     ai_prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ai_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="gmail")
+    fixture_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    parent_message_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    literature_identifiable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    literature_case_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    literature_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    literature_cases: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    literature_screened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

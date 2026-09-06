@@ -103,7 +103,7 @@
         <div class="review-source">
           <article class="panel" id="email-cite">
             <header class="panel-head">
-              <h2>Email</h2>
+              <h2>{{ item.source === 'gmail' || !item.source ? 'Email' : 'Source text' }}</h2>
               @if (highlightTarget() === 'email') {
                 <span class="flag">Source highlighted</span>
               }
@@ -218,6 +218,70 @@
         </div>
 
         <aside class="review-side">
+          @if (showLiterature()) {
+            <article class="panel">
+              <header class="panel-head">
+                <h2>Literature screening</h2>
+                @if (item.source === 'upload') {
+                  <span class="flag">Uploaded</span>
+                }
+                @if (item.source === 'split') {
+                  <span class="flag">Split case</span>
+                }
+              </header>
+              <p class="muted">
+                Identifiable patient case? Answer yes only when this document describes a specific
+                person and a product-related event. Multiple patients should be split into separate
+                queue items.
+              </p>
+              @if (item.literature_rationale) {
+                <p>{{ item.literature_rationale }}</p>
+              }
+              <p class="muted meta">
+                AI:
+                @if (item.literature_identifiable == null && !item.literature_screened_at) {
+                  not screened yet
+                } @else if (item.literature_identifiable) {
+                  yes · {{ item.literature_case_count || item.literature_cases?.length || 0 }} case(s)
+                } @else {
+                  no identifiable case
+                }
+              </p>
+              @if (item.literature_cases?.length) {
+                <ol class="case-list">
+                  @for (entry of item.literature_cases; track entry.index) {
+                    <li>
+                      <strong>Case {{ entry.index }}.</strong>
+                      {{ entry.summary }}
+                    </li>
+                  }
+                </ol>
+              }
+              <div class="field-actions">
+                <button type="button" class="btn ghost" (click)="screenLiterature()" [disabled]="saving()">
+                  {{ item.literature_screened_at ? 'Re-screen' : 'Screen article' }}
+                </button>
+                <button type="button" class="btn ghost" (click)="answerLiterature(true)" [disabled]="saving()">
+                  Yes — identifiable
+                </button>
+                <button type="button" class="btn ghost" (click)="answerLiterature(false)" [disabled]="saving()">
+                  No
+                </button>
+                @if (
+                  item.literature_identifiable &&
+                  (item.literature_case_count || 0) >= 2 &&
+                  (item.child_count || 0) === 0
+                ) {
+                  <button type="button" class="btn primary" (click)="splitLiterature()" [disabled]="saving()">
+                    Split {{ item.literature_case_count }} cases
+                  </button>
+                }
+              </div>
+              @if ((item.child_count || 0) > 0) {
+                <p class="muted meta">Already split into {{ item.child_count }} queue items.</p>
+              }
+            </article>
+          }
           <article class="panel">
             <header class="panel-head">
               <h2>AI summary</h2>

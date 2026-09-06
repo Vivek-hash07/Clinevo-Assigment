@@ -9,6 +9,13 @@
     </div>
 
     <div class="top-actions">
+      <button type="button" class="btn ghost" (click)="loadFixtures()" [disabled]="loadingFixtures()">
+        {{ loadingFixtures() ? 'Loading fixtures…' : 'Load local fixtures' }}
+      </button>
+      <label class="btn ghost upload-btn">
+        {{ uploading() ? 'Uploading…' : 'Upload PDF' }}
+        <input type="file" accept="application/pdf" multiple hidden [disabled]="uploading()" (change)="uploadPdfs($event)" />
+      </label>
       <button type="button" class="btn ghost" (click)="seedMailbox()" [disabled]="seeding()">
         {{ seeding() ? 'Sending samples…' : 'Send sample mail' }}
       </button>
@@ -78,8 +85,8 @@
         <p class="eyebrow">Nothing here</p>
         <h2>No messages in this view</h2>
         <p>
-          Connect Gmail, send the synthetic samples, then sync. Intake stores sender, subject, date,
-          body, and PDF attachments. Other file types are logged and left unprocessed.
+          Load the Day 6 synthetic batch into this queue (no Gmail required), or upload an article PDF
+          for literature screening. Connect Gmail only if you want the same samples delivered to the mailbox.
         </p>
       </div>
     } @else {
@@ -127,6 +134,15 @@
                   }
                   @if (duration(item)) {
                     · {{ duration(item) }}
+                  }
+                  @if (item.source === 'upload') {
+                    · Uploaded
+                  }
+                  @if (item.source === 'split') {
+                    · Split case
+                  }
+                  @if (item.source === 'fixture') {
+                    · Local fixture
                   }
                   @if (item.last_error) {
                     · <span class="err-inline">{{ item.last_error }}</span>

@@ -11,7 +11,7 @@ from app.inngest_client import inngest_client
 from app.models import GmailCredential
 from app.schemas import GmailStatusOut, SeedSyntheticOut, SyncMailOut
 from app.services.audit import write_audit
-from app.services.synthetic import send_synthetic_mailbox, synthetic_catalog
+from app.services.synthetic import batch_keys, send_synthetic_mailbox, synthetic_catalog
 
 router = APIRouter(prefix="/api/gmail", tags=["gmail"])
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def seed_synthetic(user: CurrentUser, db: DbSession) -> SeedSyntheticOut:
         )
     mailbox = (cred.gmail_email if cred else None) or user.email
     try:
-        result = send_synthetic_mailbox(mailbox)
+        result = send_synthetic_mailbox(mailbox, batch_keys())
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -108,7 +108,7 @@ def seed_synthetic(user: CurrentUser, db: DbSession) -> SeedSyntheticOut:
         count=result["count"],
         sent=result["sent"],
         message=(
-            f"Sent {result['count']} synthetic emails to {mailbox}. "
+            f"Sent {result['count']} synthetic emails to {mailbox} (Day 6 batch). "
             "Wait about 15 seconds, then sync the mailbox."
         ),
     )

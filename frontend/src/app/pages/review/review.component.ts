@@ -245,6 +245,94 @@ export class ReviewComponent implements OnInit, OnDestroy {
     this.submit({ action: 'complete' });
   }
 
+  showLiterature(): boolean {
+    const item = this.detail();
+    if (!item) {
+      return false;
+    }
+    if (item.source === 'upload' || item.source === 'split' || item.parent_message_id) {
+      return true;
+    }
+    if ((item.fixture_key || '').startsWith('article-')) {
+      return true;
+    }
+    if (item.literature_cases?.length || item.literature_identifiable != null) {
+      return true;
+    }
+    return (item.attachments || []).some(
+      (att) =>
+        (att.document_flavor || '').toLowerCase() === 'article' ||
+        (att.filename || '').toLowerCase().includes('article'),
+    );
+  }
+
+  screenLiterature(): void {
+    if (!this.messageId || this.saving()) {
+      return;
+    }
+    this.saving.set(true);
+    this.notice.set('');
+    this.queue.screenLiterature(this.messageId).subscribe({
+      next: (res) => {
+        this.saving.set(false);
+        this.noticeKind.set('ok');
+        this.notice.set(res.message);
+        this.startPoll();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.noticeKind.set('warn');
+        this.notice.set(readHttpError(err, 'Could not queue literature screening.'));
+      },
+    });
+  }
+
+  answerLiterature(identifiable: boolean): void {
+    if (!this.messageId || this.saving()) {
+      return;
+    }
+    this.saving.set(true);
+    this.notice.set('');
+    this.queue.answerLiterature(this.messageId, identifiable).subscribe({
+      next: (detail) => {
+        this.saving.set(false);
+        this.noticeKind.set('ok');
+        this.notice.set(
+          identifiable
+            ? 'Marked as an identifiable patient case. Split if more than one case is listed.'
+            : 'Marked as not an identifiable patient case.',
+        );
+        this.applyDetail(detail, false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.noticeKind.set('warn');
+        this.notice.set(readHttpError(err, 'Could not save the literature answer.'));
+      },
+    });
+  }
+
+  splitLiterature(): void {
+    if (!this.messageId || this.saving()) {
+      return;
+    }
+    this.saving.set(true);
+    this.notice.set('');
+    this.queue.splitLiterature(this.messageId).subscribe({
+      next: (res) => {
+        this.saving.set(false);
+        this.noticeKind.set('ok');
+        this.notice.set(res.message);
+        this.load();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.noticeKind.set('warn');
+        this.notice.set(readHttpError(err, 'Could not split the article into cases.'));
+      },
+    });
+  }
+
   private submit(body: { action: 'accept' | 'override' | 'complete'; field?: string; value?: string; reason?: string }): void {
     if (!this.messageId || this.saving()) {
       return;

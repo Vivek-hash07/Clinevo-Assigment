@@ -39,6 +39,8 @@ export class InboxComponent implements OnInit, OnDestroy {
   readonly loadError = signal('');
   readonly syncing = signal(false);
   readonly seeding = signal(false);
+  readonly loadingFixtures = signal(false);
+  readonly uploading = signal(false);
   readonly notice = signal('');
   readonly noticeKind = signal<'ok' | 'warn'>('ok');
 
@@ -128,6 +130,51 @@ export class InboxComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadFixtures(): void {
+    if (this.loadingFixtures()) {
+      return;
+    }
+    this.loadingFixtures.set(true);
+    this.notice.set('');
+    this.queue.loadFixtures().subscribe({
+      next: (res) => {
+        this.loadingFixtures.set(false);
+        this.noticeKind.set(res.ok ? 'ok' : 'warn');
+        this.notice.set(res.message);
+        this.watchQueue(180000);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.loadingFixtures.set(false);
+        this.noticeKind.set('warn');
+        this.notice.set(readHttpError(err, 'Could not load local fixtures. Is Inngest running?'));
+      },
+    });
+  }
+
+  uploadPdfs(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files || []);
+    input.value = '';
+    if (!files.length || this.uploading()) {
+      return;
+    }
+    this.uploading.set(true);
+    this.notice.set('');
+    this.queue.uploadPdfs(files).subscribe({
+      next: (res) => {
+        this.uploading.set(false);
+        this.noticeKind.set('ok');
+        this.notice.set(res.message);
+        this.watchQueue(180000);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.uploading.set(false);
+        this.noticeKind.set('warn');
+        this.notice.set(readHttpError(err, 'Could not upload the PDF.'));
+      },
+    });
+  }
+
   chip(label: Classification) {
     return categoryChip(label.category);
   }
@@ -149,13 +196,13 @@ export class InboxComponent implements OnInit, OnDestroy {
     return text;
   }
 
-  private watchQueue(): void {
+  private watchQueue(ms = 20000): void {
     this.poll?.unsubscribe();
     if (this.pollTimer) {
       window.clearTimeout(this.pollTimer);
     }
     this.refresh();
     this.poll = interval(2500).subscribe(() => this.refresh());
-    this.pollTimer = window.setTimeout(() => this.poll?.unsubscribe(), 20000);
+    this.pollTimer = window.setTimeout(() => this.poll?.unsubscribe(), ms);
   }
 }

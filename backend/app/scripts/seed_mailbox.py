@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from app.services.synthetic import send_synthetic_mailbox, synthetic_catalog
+from app.services.synthetic import batch_keys, send_synthetic_mailbox, synthetic_catalog
 
 
 def main() -> int:
@@ -15,10 +15,16 @@ def main() -> int:
         "--only",
         nargs="*",
         choices=[item.key for item in synthetic_catalog()],
-        help="Optional template keys. Default: send all.",
+        help="Optional template keys. Default: Day 6 batch of 15.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Send the full catalog instead of the 15-document batch.",
     )
     args = parser.parse_args()
-    result = send_synthetic_mailbox(args.to_email, args.only)
+    keys = None if args.all else (args.only or batch_keys())
+    result = send_synthetic_mailbox(args.to_email, keys)
     print(f"Sent {result['count']} messages to {result['to']}: {', '.join(result['sent'])}")
     return 0
 

@@ -39,6 +39,13 @@ PROMPT_CLASSIFY = "classify_v1"
 PROMPT_EXTRACT_ICSR = "extract_icsr_v1"
 PROMPT_EXTRACT_PQC = "extract_pqc_v1"
 PROMPT_EXTRACT_MI = "extract_mi_v1"
+PROMPT_LITERATURE = "literature_screen_v1"
+
+SOURCE_GMAIL = "gmail"
+SOURCE_UPLOAD = "upload"
+SOURCE_SPLIT = "split"
+SOURCE_FIXTURE = "fixture"
+MESSAGE_SOURCES = (SOURCE_GMAIL, SOURCE_UPLOAD, SOURCE_SPLIT, SOURCE_FIXTURE)
 
 CAT_ICSR = "Safety Report (ICSR)"
 CAT_PQC = "Quality Complaint (PQC)"

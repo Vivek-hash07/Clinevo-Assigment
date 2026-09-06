@@ -10,6 +10,7 @@ from app.constants import (
     MI_FIELDS,
     NOT_STATED,
     PQC_FIELDS,
+    PROMPT_LITERATURE,
 )
 
 
@@ -252,10 +253,50 @@ Local tables JSON:
 {local_tables}
 """ + PDF_STEP1_JSON_SHAPE
 
+LITERATURE_SCREEN_V1 = f"""Prompt version: {PROMPT_LITERATURE}
+
+This uploaded PDF is being screened as literature (not a Gmail safety mailbox item).
+All content is SYNTHETIC / fictional. There are no real patients.
+
+Question: does this document describe one or more identifiable patient cases?
+
+An identifiable patient case means a narrative about a specific person who took a product
+and had an adverse event (age/sex/initials, a reaction, a named product — even loosely).
+A methods paper, review, or animal study with no person-level story is not identifiable.
+
+If multiple distinct patients are described, list each as a separate case. Do not merge them.
+
+Return JSON only:
+{{
+  "identifiable_patient_case": true,
+  "case_count": 1,
+  "rationale": "one or two sentences",
+  "cases": [
+    {{
+      "index": 1,
+      "summary": "one-line case summary",
+      "excerpt": "verbatim span from the pack that identifies this case",
+      "source_ref": "pdf:ATTACHMENT_ID:page:1"
+    }}
+  ]
+}}
+
+Rules:
+- identifiable_patient_case is true only when at least one person-level case exists.
+- case_count must equal the length of cases. Use 0 and [] when none exist.
+- excerpt must be copied from the cited source_ref. Do not invent.
+- source_ref must be one of the refs in the pack.
+- {UNKNOWN_OVER_GUESSING}
+
+Message pack:
+{{pack}}
+"""
+
 PROMPT_TEMPLATES = {
     "understand_v1": UNDERSTAND_V1,
     "classify_v1": CLASSIFY_V1,
     "extract_icsr_v1": EXTRACT_ICSR_V1,
     "extract_pqc_v1": EXTRACT_PQC_V1,
     "extract_mi_v1": EXTRACT_MI_V1,
+    PROMPT_LITERATURE: LITERATURE_SCREEN_V1,
 }

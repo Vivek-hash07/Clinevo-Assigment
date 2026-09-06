@@ -6,7 +6,7 @@ from sqlalchemy.sql.schema import Column
 
 from app.database import Base, engine
 
-MIGRATION_VERSION = 8
+MIGRATION_VERSION = 9
 
 
 def _default_clause(column: Column) -> str:
@@ -145,6 +145,17 @@ def ensure_schema() -> None:
         )
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_status ON messages (status)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_user_id ON messages (user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_parent_id ON messages (parent_message_id)"))
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_user_fixture_key "
+                "ON messages (user_id, fixture_key) "
+                "WHERE fixture_key IS NOT NULL"
+            )
+        )
+        conn.execute(
+            text("UPDATE messages SET source = 'gmail' WHERE source IS NULL OR source = ''")
+        )
         conn.execute(
             text(
                 "DELETE FROM classifications a USING classifications b "

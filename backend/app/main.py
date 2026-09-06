@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.schema_sync import ensure_schema
-from app.routers import auth, gmail, health, messages
+from app.routers import auth, gmail, health, messages, uploads
 
 
 def _cors_origins(frontend_url: str) -> list[str]:
@@ -66,6 +66,7 @@ def create_app() -> FastAPI:
     application.include_router(auth.router)
     application.include_router(gmail.router)
     application.include_router(messages.router)
+    application.include_router(uploads.router)
 
     import inngest.fast_api
 

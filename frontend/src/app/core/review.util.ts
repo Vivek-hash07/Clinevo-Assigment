@@ -93,6 +93,12 @@ export function auditLabel(eventType: string): string {
     'review.accepted': 'Reviewer accepted a field',
     'review.overridden': 'Reviewer overrode a field',
     'review.completed': 'Reviewer completed the case',
+    'ai.literature_screened': 'AI screened for patient cases',
+    'review.literature_answered': 'Reviewer answered identifiable case?',
+    'literature.split': 'Literature case split off',
+    'literature.split_parent': 'Literature article split',
+    'upload.received': 'PDF uploaded outside Gmail',
+    'email.ingested': 'Message ingested',
   };
   return labels[eventType] || eventType.replace(/[._]/g, ' ');
 }

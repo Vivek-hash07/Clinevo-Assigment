@@ -277,12 +277,44 @@ async def ai_extract(ctx: inngest.Context) -> dict:
     message_id = str(ctx.event.data["message_id"])
     try:
         result = await ctx.step.run("extract-facts", extract_facts, message_id, ctx.run_id)
+        if result.get("ok") and result.get("screen_literature") and result.get("message_id"):
+            await ctx.step.send_event(
+                "literature-screen",
+                inngest.Event(
+                    name="literature/screen",
+                    id=f"literature-screen-{result['message_id']}",
+                    data={
+                        "message_id": result["message_id"],
+                        "user_id": result.get("user_id"),
+                    },
+                ),
+            )
         if not result.get("ok") and not result.get("skip"):
             raise inngest.NonRetriableError(str(result.get("reason") or "extract_failed"))
         return result
     except inngest.NonRetriableError:
         await ctx.step.run("mark-failed", mark_ai_failed, message_id, ctx.run_id, "extract_failed")
         raise
+
+
+@inngest_client.create_function(
+    fn_id="ai-literature-screen",
+    name="ai/literature-screen",
+    trigger=inngest.TriggerEvent(event="literature/screen"),
+    retries=3,
+    concurrency=[
+        inngest.Concurrency(limit=2, key="event.data.user_id"),
+        inngest.Concurrency(limit=4),
+    ],
+)
+async def ai_literature_screen(ctx: inngest.Context) -> dict:
+    from app.services.literature import screen_literature
+
+    message_id = str(ctx.event.data["message_id"])
+    result = await ctx.step.run("screen-literature", screen_literature, message_id, ctx.run_id)
+    if not result.get("ok") and not result.get("skip"):
+        raise inngest.NonRetriableError(str(result.get("reason") or "literature_screen_failed"))
+    return result
 
 
 INNGEST_FUNCTIONS = [
@@ -293,4 +325,5 @@ INNGEST_FUNCTIONS = [
     ai_understand,
     ai_classify,
     ai_extract,
+    ai_literature_screen,
 ]

@@ -1,0 +1,81 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1606 >>
+stream
+BT
+/F1 9 Tf
+54 760 Td (SYNTHETIC / FICTIONAL ? not a real patient, product complaint, or publication.) Tj
+0 -18 Td /F1 14 Tf
+(Fictional methods paper on mailbox classification) Tj
+0 -14 Td /F1 10 Tf
+(Clinevo Prototype Lab \(invented\)) Tj
+0 -12 Td /F1 9 Tf
+(Fictional Pharmacovigilance Letters 2024;12:1-2. Made-up sample.) Tj
+ET
+BT /F1 9 Tf
+54 690 Td (Abstract. This paper explains a) Tj
+0 -11 Td (toy algorithm. It contains no) Tj
+0 -11 Td (patient narrative.) Tj
+ET
+BT /F1 9 Tf
+54 610 Td (Background. Automated inbox) Tj
+0 -12 Td (tools need labeled examples. All) Tj
+0 -12 Td (examples in this journal issue) Tj
+0 -12 Td (are invented.) Tj
+0 -12 Td ( ) Tj
+0 -12 Td (Methods. We counted tokens in) Tj
+0 -12 Td (synthetic emails. No human) Tj
+0 -12 Td (subjects were enrolled. No) Tj
+0 -12 Td (medicinal product was) Tj
+0 -12 Td (administered to a person.) Tj
+0 -12 Td ( ) Tj
+0 -12 Td (There is no adverse event, no) Tj
+0 -12 Td (quality defect, and no) Tj
+0 -12 Td (identifiable patient.) Tj
+0 -12 Td ( ) Tj
+ET
+BT /F1 9 Tf
+410 610 Td (Results. Accuracy numbers in) Tj
+0 -12 Td (this paper are made up \(0.00\).) Tj
+0 -12 Td (They must not be treated as) Tj
+0 -12 Td (evidence.) Tj
+0 -12 Td ( ) Tj
+0 -12 Td (Discussion. Literature screening) Tj
+0 -12 Td (should mark this document as not) Tj
+0 -12 Td (an identifiable patient case.) Tj
+0 -12 Td ( ) Tj
+0 -12 Td (Funding. None. Conflicts: none.) Tj
+0 -12 Td (This PDF exists only to test the) Tj
+0 -12 Td (negative path.) Tj
+0 -12 Td ( ) Tj
+ET
+BT /F1 8 Tf
+54 70 Td (References \(fictional\)) Tj
+0 -10 Td (Prototype Lab. Fictional Methods. 2024;1:1.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001899 00000 n 
+trailer << /Size 6 /Root 1 0 R >>
+startxref
+1996
+%%EOF

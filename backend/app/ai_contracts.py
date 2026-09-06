@@ -19,6 +19,7 @@ from app.constants import (
     PROMPT_EXTRACT_ICSR,
     PROMPT_EXTRACT_MI,
     PROMPT_EXTRACT_PQC,
+    PROMPT_LITERATURE,
     PROMPT_UNDERSTAND,
 )
 
@@ -106,6 +107,26 @@ EXTRACT_FIELD_SCHEMA = _obj(
 
 EXTRACT_SCHEMA = _obj({"fields": _arr(EXTRACT_FIELD_SCHEMA)}, ["fields"])
 
+LITERATURE_SCHEMA = _obj(
+    {
+        "identifiable_patient_case": _bool(),
+        "case_count": {"type": "integer"},
+        "rationale": _str(),
+        "cases": _arr(
+            _obj(
+                {
+                    "index": {"type": "integer"},
+                    "summary": _str(),
+                    "excerpt": _str(),
+                    "source_ref": _str(),
+                },
+                ["index", "summary", "excerpt", "source_ref"],
+            )
+        ),
+    },
+    ["identifiable_patient_case", "case_count", "rationale", "cases"],
+)
+
 
 @dataclass(frozen=True)
 class PromptSpec:
@@ -121,6 +142,7 @@ PROMPT_SPECS: dict[str, PromptSpec] = {
     PROMPT_EXTRACT_ICSR: PromptSpec(PROMPT_EXTRACT_ICSR, "extract_icsr", EXTRACT_SCHEMA, 4000),
     PROMPT_EXTRACT_PQC: PromptSpec(PROMPT_EXTRACT_PQC, "extract_pqc", EXTRACT_SCHEMA, 2000),
     PROMPT_EXTRACT_MI: PromptSpec(PROMPT_EXTRACT_MI, "extract_mi", EXTRACT_SCHEMA, 2000),
+    PROMPT_LITERATURE: PromptSpec(PROMPT_LITERATURE, "literature_screen", LITERATURE_SCHEMA, 3000),
 }
 
 CATEGORY_TO_EXTRACT = {

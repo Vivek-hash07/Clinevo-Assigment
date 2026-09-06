@@ -152,6 +152,46 @@ Without Tesseract, scanned pages still go through OpenRouter vision. Without an 
 - Password reset revokes all previous sessions
 - After login you land on `/inbox`
 
+## Day 6 — synthetic fixtures and batch run
+
+All mailbox and PDF samples are **made-up**. There is no real patient data.
+
+| Required | Catalog |
+|---|---|
+| Emails with reaction detail | 14 |
+| Digital PDFs | 14 |
+| Scanned / handwritten PDFs | 2 |
+| Fictional article PDFs | 5 |
+| Non-English PDFs | 2 |
+| PQC-only | 3 |
+| MI-only | 2 |
+| Irrelevant / marketing | 2 |
+
+**Load 15 documents into the reviewer queue (no Gmail):**
+
+1. Sign in at http://localhost:8000
+2. Keep FastAPI on 8080 and Inngest Dev Server running
+3. Click **Load local fixtures**
+
+Or from the backend venv:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m app.scripts.batch_run --write-pdfs --load --user-email you@example.com --wait 900 --export
+```
+
+That writes:
+
+- `artifacts/day6/pdfs/` — every synthetic PDF (upload these for the literature bonus)
+- `artifacts/day6/extracted/*.json` — extracted JSON per document
+- `artifacts/day6/timings.csv` and `timings.json` — `started_at` / `finished_at` / `duration_ms` rollup
+- `artifacts/day6/coverage.json` — Day 6 required counts
+
+Gmail path (optional): **Send sample mail** then **Sync my mail**, or `python -m app.scripts.seed_mailbox you@gmail.com`.
+
+**Bonus — literature screening:** **Upload PDF** on the queue (article PDFs from `artifacts/day6/pdfs/`, especially `fictional-article-two-cases.pdf`). The same review UI asks **identifiable patient case?** and can **split** multiple cases. Each child reuses classify/extract.
+
 For production, serve the Angular build and `/api` from the same HTTPS origin. Set
 `APP_ENV=production`, HTTPS `FRONTEND_URL`/`BACKEND_URL`, and `COOKIE_SECURE=true`. The backend
 refuses unsafe production settings.

@@ -88,6 +88,9 @@ export interface QueueItem {
   classifications?: Classification[];
   duration_ms?: number | null;
   last_error?: string | null;
+  source?: string;
+  fixture_key?: string | null;
+  parent_message_id?: string | null;
 }
 
 export interface QueueCounts {
@@ -136,6 +139,19 @@ export interface QueueDetail extends QueueItem {
   ai_prompt_version?: string | null;
   ai_completed_at?: string | null;
   can_review: boolean;
+  literature_identifiable?: boolean | null;
+  literature_case_count?: number | null;
+  literature_rationale?: string | null;
+  literature_cases?: LiteratureCase[];
+  literature_screened_at?: string | null;
+  child_count?: number;
+}
+
+export interface LiteratureCase {
+  index: number;
+  summary: string;
+  excerpt: string;
+  source_ref: string;
 }
 
 export interface PdfPage {
@@ -189,5 +205,31 @@ export interface SeedSyntheticResult {
   to: string;
   count: number;
   sent: string[];
+  message: string;
+}
+
+export interface FixtureLoadResult {
+  ok: boolean;
+  queued: boolean;
+  count: number;
+  message_ids: string[];
+  keys: string[];
+  queued_event_ids?: string[];
+  message: string;
+}
+
+export interface UploadResult {
+  ok: boolean;
+  queued: boolean;
+  message_id: string;
+  queued_event_ids?: string[];
+  message: string;
+}
+
+export interface LiteratureSplitResult {
+  ok: boolean;
+  parent_id: string;
+  child_ids: string[];
+  queued_event_ids?: string[];
   message: string;
 }

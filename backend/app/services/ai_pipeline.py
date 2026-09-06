@@ -319,11 +319,15 @@ def extract_facts(message_id: str, inngest_run_id: str | None = None) -> dict[st
             message.status = STATUS_READY
             message.ai_completed_at = datetime.now(UTC)
             _finish_run(run, status="skipped", started=started, model=message.ai_model)
+            from app.services.literature import should_auto_screen
+
             return {
                 "ok": True,
                 "skip": True,
                 "reason": "already_extracted",
                 "message_id": message_id,
+                "user_id": message.user_id,
+                "screen_literature": should_auto_screen(message),
             }
         if message.extracted_fields and extractable:
             expected = {name for cat in extractable for name in CATEGORY_TO_EXTRACT[cat][1]}
@@ -333,6 +337,8 @@ def extract_facts(message_id: str, inngest_run_id: str | None = None) -> dict[st
                 if message.ai_completed_at is None:
                     message.ai_completed_at = datetime.now(UTC)
                 _finish_run(run, status="skipped", started=started, model=message.ai_model)
+                from app.services.literature import should_auto_screen
+
                 return {
                     "ok": True,
                     "skip": True,
@@ -340,6 +346,7 @@ def extract_facts(message_id: str, inngest_run_id: str | None = None) -> dict[st
                     "message_id": message_id,
                     "user_id": message.user_id,
                     "field_count": len(message.extracted_fields),
+                    "screen_literature": should_auto_screen(message),
                 }
 
         pack = build_message_pack(message, settings)
@@ -398,6 +405,8 @@ def extract_facts(message_id: str, inngest_run_id: str | None = None) -> dict[st
             },
             message_id=message.id,
         )
+        from app.services.literature import should_auto_screen
+
         return {
             "ok": True,
             "message_id": message.id,
@@ -405,6 +414,7 @@ def extract_facts(message_id: str, inngest_run_id: str | None = None) -> dict[st
             "categories": labels,
             "field_count": len(facts),
             "not_stated_count": sum(1 for fact in facts if fact.value == "Not stated"),
+            "screen_literature": should_auto_screen(message),
         }
 
 

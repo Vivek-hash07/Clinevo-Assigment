@@ -291,6 +291,26 @@ textarea:focus {
   gap: 0.8rem;
 }
 
+.top-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.upload-btn {
+  margin: 0;
+}
+
+.case-list {
+  margin: 0 0 0.75rem;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.case-list li + li {
+  margin-top: 0.35rem;
+}
+
 .who {
   flex-direction: column;
   align-items: flex-end;

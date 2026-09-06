@@ -16,6 +16,7 @@ from app.constants import (
     PROMPT_EXTRACT_ICSR,
     PROMPT_EXTRACT_MI,
     PROMPT_EXTRACT_PQC,
+    PROMPT_LITERATURE,
     PROMPT_UNDERSTAND,
 )
 from app.prompts import PROMPT_TEMPLATES, UNKNOWN_OVER_GUESSING
@@ -78,6 +79,7 @@ def test_prompt_versions_are_registered():
         PROMPT_EXTRACT_ICSR,
         PROMPT_EXTRACT_PQC,
         PROMPT_EXTRACT_MI,
+        PROMPT_LITERATURE,
     }
     assert set(PROMPT_SPECS) == set(PROMPT_TEMPLATES)
 

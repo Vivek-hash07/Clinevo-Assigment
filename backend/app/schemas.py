@@ -90,6 +90,59 @@ class SeedSyntheticOut(BaseModel):
     message: str
 
 
+class LiteratureCaseOut(BaseModel):
+    index: int
+    summary: str
+    excerpt: str
+    source_ref: str = ""
+
+
+class FixtureLoadOut(BaseModel):
+    ok: bool
+    queued: bool
+    count: int
+    message_ids: list[str]
+    keys: list[str]
+    queued_event_ids: list[str] = []
+    message: str
+
+
+class FixtureCoverageOut(BaseModel):
+    emails_with_reaction: int
+    digital_pdfs: int
+    scanned_or_handwritten_pdfs: int
+    article_pdfs: int
+    non_english_pdfs: int
+    pqc_only: int
+    mi_only: int
+    irrelevant: int
+    catalog_size: int
+    batch_size: int
+    meets_day6: bool
+    loaded_keys: list[str] = []
+    templates: list[str] = []
+
+
+class UploadOut(BaseModel):
+    ok: bool
+    queued: bool
+    message_id: str
+    queued_event_ids: list[str] = []
+    message: str
+
+
+class LiteratureAnswerRequest(BaseModel):
+    identifiable: bool
+
+
+class LiteratureSplitOut(BaseModel):
+    ok: bool
+    parent_id: str
+    child_ids: list[str]
+    queued_event_ids: list[str] = []
+    message: str
+
+
 class QueueCounts(BaseModel):
     pending: int = 0
     processing: int = 0
@@ -224,6 +277,9 @@ class QueueItemOut(BaseModel):
     classifications: list[ClassificationOut] = []
     duration_ms: int | None = None
     last_error: str | None = None
+    source: str = "gmail"
+    fixture_key: str | None = None
+    parent_message_id: str | None = None
 
 
 class QueueListOut(BaseModel):
@@ -249,3 +305,9 @@ class QueueDetailOut(QueueItemOut):
     ai_prompt_version: str | None = None
     ai_completed_at: str | None = None
     can_review: bool = False
+    literature_identifiable: bool | None = None
+    literature_case_count: int | None = None
+    literature_rationale: str | None = None
+    literature_cases: list[LiteratureCaseOut] = []
+    literature_screened_at: str | None = None
+    child_count: int = 0

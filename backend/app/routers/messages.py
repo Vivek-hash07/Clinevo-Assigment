@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from urllib.parse import quote
+import time
 
+import inngest
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy import case, func, select
@@ -9,12 +11,17 @@ from sqlalchemy.orm import selectinload
 
 from app.constants import QUEUE_STATUSES
 from app.deps import CurrentUser, DbSession
+from app.inngest_client import inngest_client
 from app.models import Attachment, AuditEvent, ExtractedField, Message, PdfPage, PipelineRun, Review
 from app.schemas import (
     AuditEventOut,
     ClassificationOut,
     ExtractedFieldOut,
     FieldGroupOut,
+    LiteratureAnswerRequest,
+    LiteratureCaseOut,
+    LiteratureSplitOut,
+    MessageOut,
     PdfPageOut,
     PdfPagesOut,
     PipelineRunOut,
@@ -26,6 +33,8 @@ from app.schemas import (
     ReviewOut,
     ReviewRequest,
 )
+from app.services.literature import apply_human_answer, split_literature_cases
+from app.services.local_ingest import enqueue_message_pipeline
 from app.services.review import (
     ReviewError,
     apply_review,
@@ -128,6 +137,9 @@ def _item_out(row: Message, duration_ms: int | None = None, last_error: str | No
         ],
         duration_ms=duration_ms,
         last_error=error,
+        source=row.source or "gmail",
+        fixture_key=row.fixture_key,
+        parent_message_id=row.parent_message_id,
     )
 
 
@@ -181,6 +193,21 @@ def _detail_out(db: DbSession, row: Message) -> QueueDetailOut:
         .limit(100)
     ).all()
     reviews = sorted(row.reviews or [], key=lambda item: item.created_at)
+    child_count = db.scalar(
+        select(func.count()).select_from(Message).where(Message.parent_message_id == row.id)
+    )
+    cases = []
+    for item in row.literature_cases or []:
+        if not isinstance(item, dict):
+            continue
+        cases.append(
+            LiteratureCaseOut(
+                index=int(item.get("index") or 0),
+                summary=str(item.get("summary") or ""),
+                excerpt=str(item.get("excerpt") or ""),
+                source_ref=str(item.get("source_ref") or ""),
+            )
+        )
     return QueueDetailOut(
         **base.model_dump(),
         body=row.body,
@@ -245,6 +272,12 @@ def _detail_out(db: DbSession, row: Message) -> QueueDetailOut:
         ai_prompt_version=row.ai_prompt_version,
         ai_completed_at=_iso(row.ai_completed_at),
         can_review=can_review_status(row.status),
+        literature_identifiable=row.literature_identifiable,
+        literature_case_count=row.literature_case_count,
+        literature_rationale=row.literature_rationale,
+        literature_cases=cases,
+        literature_screened_at=_iso(row.literature_screened_at),
+        child_count=int(child_count or 0),
     )
 
 
@@ -310,6 +343,76 @@ def review_message(message_id: str, body: ReviewRequest, user: CurrentUser, db: 
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
     return _detail_out(db, row)
+
+
+@router.post("/{message_id}/literature/screen", response_model=MessageOut)
+def queue_literature_screen(message_id: str, user: CurrentUser, db: DbSession) -> MessageOut:
+    row = _load_message(db, message_id, user.id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    row.literature_screened_at = None
+    db.commit()
+    try:
+        inngest_client.send_sync(
+            inngest.Event(
+                name="literature/screen",
+                id=f"literature-screen-{row.id}-{int(time.time())}",
+                data={"message_id": row.id, "user_id": user.id},
+            )
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not queue literature screening. Is Inngest running?",
+        ) from None
+    return MessageOut(ok=True, message="Literature screening queued. Refresh in a few seconds.")
+
+
+@router.post("/{message_id}/literature/answer", response_model=QueueDetailOut)
+def answer_literature(
+    message_id: str,
+    body: LiteratureAnswerRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> QueueDetailOut:
+    row = _load_message(db, message_id, user.id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    apply_human_answer(db, user, row, body.identifiable)
+    db.commit()
+    row = _load_message(db, message_id, user.id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    return _detail_out(db, row)
+
+
+@router.post("/{message_id}/literature/split", response_model=LiteratureSplitOut)
+def split_literature(message_id: str, user: CurrentUser, db: DbSession) -> LiteratureSplitOut:
+    row = _load_message(db, message_id, user.id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    try:
+        children = split_literature_cases(db, user, row)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    queued: list[str] = []
+    try:
+        for child in children:
+            queued.extend(enqueue_message_pipeline(str(user.id), child))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Cases were created but classify/extract could not be queued. Start Inngest and split again.",
+        ) from None
+    return LiteratureSplitOut(
+        ok=True,
+        parent_id=str(row.id),
+        child_ids=[str(item.id) for item in children],
+        queued_event_ids=queued,
+        message=f"Split into {len(children)} cases. Each is running classify/extract in the same queue.",
+    )
 
 
 def _page_out(page: PdfPage) -> PdfPageOut:
