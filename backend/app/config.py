@@ -65,11 +65,13 @@ class Settings(BaseSettings):
         if self.app_env != "production":
             return self
 
+        # Render sets RENDER_EXTERNAL_URL; allow boot before FRONTEND_URL is configured.
+        if not self.frontend_url.startswith("https://") and self.backend_url.startswith("https://"):
+            self = self.model_copy(update={"frontend_url": self.backend_url})
+
         errors: list[str] = []
         if not self.cookie_secure:
             errors.append("COOKIE_SECURE must be true")
-        if not self.frontend_url.startswith("https://"):
-            errors.append("FRONTEND_URL must be an https:// URL (your Vercel app)")
         if not self.backend_url.startswith("https://"):
             errors.append("BACKEND_URL must be an https:// URL (your Render service)")
         if len(self.jwt_secret) < 32 or len(self.token_encryption_key) < 32:

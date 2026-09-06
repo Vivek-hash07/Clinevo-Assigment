@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -9,6 +10,8 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.schema_sync import ensure_schema
 from app.routers import auth, gmail, health, messages, uploads
+
+_VERCEL_ORIGIN = re.compile(r"^https://([a-z0-9-]+\.)*vercel\.app$", re.IGNORECASE)
 
 
 def _cors_origins(frontend_url: str) -> list[str]:
@@ -27,6 +30,13 @@ def _trusted_origins(frontend_url: str, backend_url: str) -> set[str]:
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     }
+
+
+def _origin_allowed(origin: str, frontend_url: str, backend_url: str) -> bool:
+    normalized = origin.rstrip("/")
+    return normalized in _trusted_origins(frontend_url, backend_url) or bool(
+        _VERCEL_ORIGIN.fullmatch(normalized)
+    )
 
 
 @asynccontextmanager
@@ -57,8 +67,8 @@ def create_app() -> FastAPI:
             return await call_next(request)
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
-            if origin and origin.rstrip("/") not in _trusted_origins(
-                settings.frontend_url, settings.backend_url
+            if origin and not _origin_allowed(
+                origin, settings.frontend_url, settings.backend_url
             ):
                 return JSONResponse(status_code=403, content={"detail": "Untrusted request origin"})
         return await call_next(request)
