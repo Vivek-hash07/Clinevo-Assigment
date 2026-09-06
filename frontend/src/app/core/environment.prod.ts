@@ -1,5 +1,5 @@
 export const environment = {
   production: true,
-  // Production serves the UI and /api from the same public origin.
-  apiUrl: '',
+  // Overwritten at build time by scripts/write-prod-env.mjs from API_URL.
+  apiUrl: "https://clinevo-api.onrender.com",
 };

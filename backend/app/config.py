@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -63,6 +64,11 @@ class Settings(BaseSettings):
             raise ValueError("INNGEST_SIGNING_KEY is required in production")
         if not self.openrouter_api_key:
             raise ValueError("OPENROUTER_API_KEY is required in production")
+        frontend_host = (urlparse(self.frontend_url).hostname or "").lower()
+        backend_host = (urlparse(self.backend_url).hostname or "").lower()
+        if frontend_host and backend_host and frontend_host != backend_host:
+            # Vercel UI + Render API are different sites; Lax cookies would not be sent.
+            return self.model_copy(update={"cookie_samesite": "none", "cookie_secure": True})
         return self
 
     access_token_ttl_seconds: int = 60 * 15

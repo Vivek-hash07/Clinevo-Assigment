@@ -6,7 +6,37 @@ from sqlalchemy.sql.schema import Column
 
 from app.database import Base, engine
 
-MIGRATION_VERSION = 9
+MIGRATION_VERSION = 10
+
+
+def _has_column(conn, table: str, column: str) -> bool:
+    return bool(
+        conn.execute(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name = :table AND column_name = :column)"
+            ),
+            {"table": table, "column": column},
+        ).scalar()
+    )
+
+
+def _drop_legacy_received_at(conn) -> None:
+    # Older prototypes stored the message date as received_at (NOT NULL).
+    # The ORM now writes sent_at, so leftover received_at blocks every insert.
+    if not _has_column(conn, "messages", "received_at"):
+        return
+    if _has_column(conn, "messages", "sent_at"):
+        conn.execute(
+            text(
+                "UPDATE messages SET sent_at = received_at "
+                "WHERE sent_at IS NULL AND received_at IS NOT NULL"
+            )
+        )
+        conn.execute(text("ALTER TABLE messages DROP COLUMN received_at"))
+    else:
+        conn.execute(text("ALTER TABLE messages RENAME COLUMN received_at TO sent_at"))
+    conn.execute(text("ALTER TABLE messages ALTER COLUMN sent_at DROP NOT NULL"))
 
 
 def _default_clause(column: Column) -> str:
@@ -44,6 +74,7 @@ def ensure_schema() -> None:
                 "version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())"
             )
         )
+        _drop_legacy_received_at(conn)
         applied = conn.execute(
             text("SELECT 1 FROM app_schema_migrations WHERE version = :version"),
             {"version": MIGRATION_VERSION},
@@ -55,15 +86,7 @@ def ensure_schema() -> None:
     pg = postgresql.dialect()
     with engine.begin() as conn:
         def has_column(table: str, column: str) -> bool:
-            return bool(
-                conn.execute(
-                    text(
-                        "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
-                        "WHERE table_schema = 'public' AND table_name = :table AND column_name = :column)"
-                    ),
-                    {"table": table, "column": column},
-                ).scalar()
-            )
+            return _has_column(conn, table, column)
 
         for table in Base.metadata.sorted_tables:
             present = conn.execute(text("SELECT to_regclass(:name)"), {"name": f"public.{table.name}"}).scalar()
@@ -78,6 +101,7 @@ def ensure_schema() -> None:
                         f'"{column.name}" {type_sql} {null_sql}'
                     )
                 )
+        _drop_legacy_received_at(conn)
         # Compatibility defaults for columns created by the earlier prototype.
         if has_column("users", "full_name"):
             conn.execute(text("ALTER TABLE users ALTER COLUMN full_name SET DEFAULT ''"))
