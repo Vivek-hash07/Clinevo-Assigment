@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -48,22 +49,42 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_production(self) -> "Settings":
+        render_url = (os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
+        updates: dict[str, object] = {}
+        if render_url.startswith("https://") and self.backend_url.startswith("http://localhost"):
+            updates["backend_url"] = render_url
+        backend_url = str(updates.get("backend_url", self.backend_url)).rstrip("/")
+        if (
+            render_url.startswith("https://")
+            and self.google_redirect_uri.startswith("http://localhost")
+        ):
+            updates["google_redirect_uri"] = f"{backend_url}/api/auth/google/callback"
+        if updates:
+            self = self.model_copy(update=updates)
+
         if self.app_env != "production":
             return self
+
+        errors: list[str] = []
         if not self.cookie_secure:
-            raise ValueError("COOKIE_SECURE must be true in production")
-        if not self.frontend_url.startswith("https://") or not self.backend_url.startswith("https://"):
-            raise ValueError("FRONTEND_URL and BACKEND_URL must use HTTPS in production")
+            errors.append("COOKIE_SECURE must be true")
+        if not self.frontend_url.startswith("https://"):
+            errors.append("FRONTEND_URL must be an https:// URL (your Vercel app)")
+        if not self.backend_url.startswith("https://"):
+            errors.append("BACKEND_URL must be an https:// URL (your Render service)")
         if len(self.jwt_secret) < 32 or len(self.token_encryption_key) < 32:
-            raise ValueError("JWT_SECRET and TOKEN_ENCRYPTION_KEY must each be at least 32 characters")
+            errors.append("JWT_SECRET and TOKEN_ENCRYPTION_KEY must each be at least 32 characters")
         if not all((self.smtp_host, self.smtp_user, self.smtp_password, self.smtp_from)):
-            raise ValueError("SMTP settings are required in production")
+            errors.append("SMTP_HOST, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM are required")
         if self.inngest_dev:
-            raise ValueError("INNGEST_DEV must be false in production")
+            errors.append("INNGEST_DEV must be false")
         if not self.inngest_signing_key:
-            raise ValueError("INNGEST_SIGNING_KEY is required in production")
+            errors.append("INNGEST_SIGNING_KEY is required")
         if not self.openrouter_api_key:
-            raise ValueError("OPENROUTER_API_KEY is required in production")
+            errors.append("OPENROUTER_API_KEY is required")
+        if errors:
+            raise ValueError("Set these in the Render Environment tab: " + "; ".join(errors))
+
         frontend_host = (urlparse(self.frontend_url).hostname or "").lower()
         backend_host = (urlparse(self.backend_url).hostname or "").lower()
         if frontend_host and backend_host and frontend_host != backend_host:
