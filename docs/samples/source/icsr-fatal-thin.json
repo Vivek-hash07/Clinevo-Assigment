@@ -1,0 +1,19 @@
+{
+  "key": "icsr-fatal-thin",
+  "subject": "[SYNTHETIC] Relative died after Examplemab \u2014 sparse fictional report",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "digital",
+    "icsr"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nA made-up caller said a relative died after taking Examplemab. Age, sex, dose, dates, and history were not provided. Do not invent them. Attached PDF is equally thin.\n",
+  "attachments": [
+    {
+      "filename": "fictional-thin-case.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 983
+    }
+  ]
+}

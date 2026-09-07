@@ -1,0 +1,20 @@
+{
+  "key": "icsr-dual-defect",
+  "subject": "[SYNTHETIC] Cracked vial and then a rash \u2014 fictional dual-label case",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "digital",
+    "icsr",
+    "pqc"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nCasey Nguyen, 47-year-old woman, received Examplemab lot EX-2209 from a vial with a cracked neck, then developed fever and rash. Photo of the vial was mentioned. This should classify as both a safety report and a quality complaint.\n",
+  "attachments": [
+    {
+      "filename": "fictional-vial-and-rash.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 1105
+    }
+  ]
+}

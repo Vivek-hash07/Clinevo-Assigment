@@ -1,0 +1,20 @@
+{
+  "key": "icsr-french-dyspnea",
+  "subject": "[SYNTHETIC] Dyspnee apres Exampletab \u2014 cas fictif en francais",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "digital",
+    "icsr",
+    "non_english"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nMessage synthetique en francais: Hugo Martin, 38 ans, homme, dyspnee et toux deux heures apres Exampletab 10 mg. Retabli. France. PDF francais en piece jointe.\n",
+  "attachments": [
+    {
+      "filename": "note-fictive-fr.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 1035
+    }
+  ]
+}

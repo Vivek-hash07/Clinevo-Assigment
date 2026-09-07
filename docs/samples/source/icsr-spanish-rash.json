@@ -1,0 +1,20 @@
+{
+  "key": "icsr-spanish-rash",
+  "subject": "[SYNTHETIC] Erupcion tras Examplemab \u2014 caso ficticio en espanol",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "digital",
+    "icsr",
+    "non_english"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nCorreo sintetico en espanol: Lucia Mora, 45 anos, sexo femenino, erupcion generalizada al segundo dia de la tercera dosis de Examplemab 40 mg. En recuperacion. Mexico. La nota adjunta esta en espanol y debe traducirse sin perder el original.\n",
+  "attachments": [
+    {
+      "filename": "nota-ficticia-es.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 1064
+    }
+  ]
+}

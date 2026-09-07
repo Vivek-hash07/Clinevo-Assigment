@@ -1,0 +1,19 @@
+{
+  "key": "article-two-cases",
+  "subject": "[SYNTHETIC] Fictional letter with two distinct patient cases",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "article",
+    "digital",
+    "icsr"
+  ],
+  "in_demo_batch": false,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nLiterature sample with TWO fictional patients (Jordan Hale anaphylaxis; Priya Shah hepatitis). Use upload-or-split to emit two reviewer cases.\n",
+  "attachments": [
+    {
+      "filename": "fictional-article-two-cases.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 2252
+    }
+  ]
+}

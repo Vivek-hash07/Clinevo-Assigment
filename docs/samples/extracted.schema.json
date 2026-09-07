@@ -1,0 +1,49 @@
+{
+  "description": "One file per processed message, written by python -m app.scripts.batch_run --export. Values come from the live OpenRouter run, not from this schema file.",
+  "id": "uuid",
+  "fixture_key": "icsr-rash-clinic",
+  "source": "fixture",
+  "subject": "[SYNTHETIC] Possible rash after Examplemab — fictional clinic case",
+  "status": "ready",
+  "summary": "10–15 sentence reviewer summary of the whole message (email + PDFs).",
+  "relevant": true,
+  "classifications": [
+    {
+      "category": "Safety Report (ICSR)",
+      "confidence": 0.0,
+      "reason": "One-line evidence-based reason"
+    }
+  ],
+  "fields": [
+    {
+      "field": "patient.age",
+      "value": "Not stated",
+      "confidence": 0.0,
+      "source_ref": "email:MESSAGE_ID or pdf:ATTACHMENT_ID:page:N",
+      "source_type": "email",
+      "quote": "verbatim span, or empty when value is Not stated"
+    }
+  ],
+  "attachments": [
+    {
+      "filename": "fictional-rash-note.pdf",
+      "flavor": "digital",
+      "duration_ms": 0,
+      "page_count": 1
+    }
+  ],
+  "pipeline_runs": [
+    {
+      "function_name": "ai/classify",
+      "status": "succeeded",
+      "duration_ms": 0,
+      "model": "openai/gpt-4o-mini",
+      "prompt_version": "classify_v1",
+      "started_at": "ISO-8601",
+      "finished_at": "ISO-8601"
+    }
+  ],
+  "duration_ms_total": 0,
+  "literature_identifiable": null,
+  "literature_case_count": null
+}

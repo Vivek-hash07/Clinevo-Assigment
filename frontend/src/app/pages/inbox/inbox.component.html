@@ -31,8 +31,8 @@
       <div>
         <h1>Reviewer queue</h1>
         <p class="muted">
-          Load the assignment’s synthetic sample emails (ICSR, PQC, MI, articles, scans). SMTP can
-          also send you a copy. Open a ready case to accept or override extracted facts.
+          Load synthetic sample emails, then open a ready case to check classification, extracted
+          facts, and source citations. Upload a PDF for literature screening.
         </p>
       </div>
       <div class="status-pill" [class.on]="mailConnected()">
@@ -46,31 +46,31 @@
       </div>
     }
 
-    <label class="email-copy">
-      <input type="checkbox" name="emailCopy" [(ngModel)]="emailCopy" />
-      Also send a copy to {{ auth.user()?.email }} via SMTP
-    </label>
-
     @if (showMailbox()) {
       <section class="mailbox-panel" aria-label="Mailbox connection">
         <header class="panel-head">
           <div>
-            <p class="eyebrow">Your mailbox</p>
-            <h2>Each reviewer connects their own inbox</h2>
+            <p class="eyebrow">After Google verification</p>
+            <h2>Live mailbox (optional)</h2>
           </div>
         </header>
         <p class="muted">
-          There is no shared password. Sign in, then connect <strong>your</strong> Gmail (or Outlook /
-          Yahoo). We store only your tokens, encrypted, and sync that mailbox into your queue.
+          The assignment asks for synthetic test data, so <strong>Load sample emails</strong> is
+          the demo path — the queue and AI pipeline run without a live inbox. Sending sample
+          mail through Gmail, and Gmail OAuth sync, wait on Google’s verification of
+          <strong>clinevo-api.onrender.com</strong>. Until that review finishes, Google shows
+          Error 403 (access_denied) for accounts that are not listed as testers. Tokens stay
+          encrypted for your account only.
         </p>
 
         <div class="connect-paths">
           <article class="connect-card">
-            <p class="eyebrow">One click</p>
-            <h3>Connect my Gmail</h3>
+            <p class="eyebrow">Gmail OAuth</p>
+            <h3>Connect Gmail</h3>
             <p class="muted">
-              Google asks you to allow read-only access to <em>your</em> mail. After you accept,
-              sync starts automatically.
+              Ready once Google completes verification of clinevo-api.onrender.com (or this
+              account is added as a tester). Until then, Load sample emails runs the same
+              pipeline.
             </p>
             @if (gmailAccount()?.connected && gmailAccount()?.sync_enabled) {
               <p class="muted meta">Connected as {{ gmailAccount()?.email }}</p>
@@ -87,18 +87,18 @@
               </div>
             } @else {
               <button type="button" class="btn primary" (click)="connectGmail()">
-                Continue with my Google account
+                Connect Gmail OAuth
               </button>
               <p class="muted meta">
-                If Google blocks the mailbox scope (unverified app), use IMAP on the right. Add
-                reviewer emails as test users on the OAuth consent screen to make one-click work.
+                Google currently returns Error 403 while the OAuth app is in Testing and
+                unverified. Load sample emails is the path designed for this prototype.
               </p>
             }
           </article>
 
           <article class="connect-card">
-            <p class="eyebrow">Works for any Gmail / Outlook user</p>
-            <h3>IMAP with my app password</h3>
+            <p class="eyebrow">IMAP</p>
+            <h3>App password</h3>
             @if (imapAccount()?.connected && imapAccount()?.sync_enabled) {
               <p class="muted meta">
                 IMAP connected as {{ imapAccount()?.email }}
@@ -151,9 +151,9 @@
                 </div>
               </form>
               <ol class="howto">
-                <li>Use the same address you want to sync — not someone else’s.</li>
-                <li>Gmail: Security → 2-Step Verification → App passwords → create one named Clinevo.</li>
-                <li>Outlook / Yahoo: create an app password for that account, and set the IMAP host if needed.</li>
+                <li>Gmail: Security → 2-Step Verification → App passwords.</li>
+                <li>Paste the 16-character password. Spaces are ignored.</li>
+                <li>Outlook or Yahoo: create an app password and set the IMAP host if needed.</li>
               </ol>
             }
           </article>
@@ -164,16 +164,16 @@
     @if (recentJobs().length || !workerRunning()) {
       <section class="pipeline-strip" aria-label="Processing pipeline">
         <p class="muted meta">
-          Worker {{ workerRunning() ? 'running' : 'not running' }}
+          Pipeline {{ workerRunning() ? 'running' : 'stopped' }}
           @if (!workerRunning()) {
-            — restart FastAPI so uploads and mailbox sync can process.
+            — restart the API so sample loads, uploads, and mail sync can process.
           }
         </p>
         @if (recentJobs().length) {
           <ul class="job-list">
             @for (job of recentJobs(); track job.id) {
               <li>
-                <span class="chip" [attr.data-status]="job.status">{{ job.status }}</span>
+                <span class="chip" [attr.data-status]="job.status">{{ jobStatus(job) }}</span>
                 <span>{{ job.label || job.kind }}</span>
                 @if (jobDuration(job)) {
                   <span class="muted">{{ jobDuration(job) }}</span>
@@ -221,12 +221,12 @@
       </div>
     } @else if (items().length === 0) {
       <div class="empty state-card">
-        <p class="eyebrow">Nothing here</p>
+        <p class="eyebrow">Empty queue</p>
         <h2>No messages in this view</h2>
         <p>
-          Click <strong>Load sample emails</strong> for the Day 6 synthetic batch (reactions, quality
-          complaints, medical questions, articles, scans). Optionally tick “Also send a copy” so SMTP
-          delivers the same dummy messages to your address. Upload a PDF for the literature bonus.
+          Click <strong>Load sample emails</strong> to queue synthetic safety reports, quality
+          complaints, medical questions, articles, scans, and non-English notes. Upload a PDF
+          to run literature screening.
         </p>
       </div>
     } @else {
@@ -259,7 +259,7 @@
                         [attr.data-tone]="tone(label)"
                         [title]="label.reason || label.category"
                       >
-                        {{ chip(label).short }}
+                        {{ chip(label).full }}
                         <em>{{ confidence(label) }}</em>
                       </span>
                     }
@@ -275,14 +275,8 @@
                   @if (duration(item)) {
                     · {{ duration(item) }}
                   }
-                  @if (item.source === 'upload') {
-                    · Uploaded
-                  }
-                  @if (item.source === 'split') {
-                    · Split case
-                  }
-                  @if (item.source === 'fixture') {
-                    · Local fixture
+                  @if (sourceText(item.source)) {
+                    · {{ sourceText(item.source) }}
                   }
                   @if (item.last_error) {
                     · <span class="err-inline">{{ item.last_error }}</span>
@@ -290,7 +284,7 @@
                 </p>
               </div>
               <span class="chip" [attr.data-status]="item.last_error && item.status !== 'reviewed' ? 'error' : item.status">
-                {{ item.last_error && item.status !== 'reviewed' ? 'error' : item.status }}
+                {{ statusText(item.last_error && item.status !== 'reviewed' ? 'error' : item.status) }}
               </span>
             </a>
           </li>

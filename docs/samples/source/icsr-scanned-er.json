@@ -1,0 +1,19 @@
+{
+  "key": "icsr-scanned-er",
+  "subject": "[SYNTHETIC] Scanned ER card \u2014 fictional dizziness after Exampletab",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "icsr",
+    "scanned"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nAttached is a made-up scanned card (image-only PDF) for Quinn Adler, 72 F, dizziness and fall after the first Exampletab tablet. Hospitalized overnight. Recovering. Ireland.\n",
+  "attachments": [
+    {
+      "filename": "fictional-scanned-er-card.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 63279
+    }
+  ]
+}

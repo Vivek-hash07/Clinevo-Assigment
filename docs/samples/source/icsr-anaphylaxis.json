@@ -1,0 +1,19 @@
+{
+  "key": "icsr-anaphylaxis",
+  "subject": "[SYNTHETIC] Anaphylaxis after first Examplemab \u2014 fictional ER case",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "digital",
+    "icsr"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nFictional ER report: Morgan Chen, 29-year-old man, 81 kg, throat tightness and hives 20 minutes after the first Examplemab 40 mg injection. Epinephrine given. Recovered. United States. Attached note repeats the same invented facts.\n",
+  "attachments": [
+    {
+      "filename": "fictional-anaphylaxis-note.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 1105
+    }
+  ]
+}

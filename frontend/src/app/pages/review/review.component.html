@@ -10,7 +10,7 @@
     <div class="top-actions">
       @if (detail(); as item) {
         <span class="chip" [attr.data-status]="item.last_error && item.status !== 'reviewed' ? 'error' : item.status">
-          {{ item.last_error && item.status !== 'reviewed' ? 'error' : item.status }}
+          {{ statusText(item.last_error && item.status !== 'reviewed' ? 'error' : item.status) }}
         </span>
         @if (item.can_review && item.status !== 'reviewed') {
           <button type="button" class="btn primary" (click)="complete()" [disabled]="saving()">
@@ -52,9 +52,9 @@
           @if (item.last_error) {
             Pipeline error: {{ item.last_error }}
           } @else if (item.status === 'processing') {
-            AI is still working on this message. Fields will appear when extraction finishes.
+            The pipeline is still extracting this message. Fields appear when extraction finishes.
           } @else {
-            This message is queued. Sync mail if it stays pending.
+            This message is queued for processing.
           }
         </div>
       }
@@ -66,6 +66,9 @@
             @if (item.sent_at) {
               · {{ item.sent_at | date: 'medium' }}
             }
+            @if (sourceText(item.source)) {
+              · {{ sourceText(item.source) }}
+            }
           </p>
           @if (item.classifications?.length) {
             <p class="cat-row">
@@ -76,11 +79,19 @@
                   [attr.data-tone]="tone(label.confidence)"
                   [title]="label.reason"
                 >
-                  {{ chip(label.category).short }}
+                  {{ chip(label.category).full }}
                   <em>{{ confidence(label.confidence) }}</em>
                 </span>
               }
             </p>
+            <ul class="reason-list">
+              @for (label of item.classifications; track label.category) {
+                <li>
+                  <strong>{{ chip(label.category).short }}.</strong>
+                  {{ label.reason }}
+                </li>
+              }
+            </ul>
           }
         </div>
         <dl class="meta-grid">
@@ -177,6 +188,9 @@
                   @if (pdf.document_flavor) {
                     <span class="muted">{{ pdf.document_flavor }}</span>
                   }
+                  @if (currentPage()?.language) {
+                    <span class="muted">{{ currentPage()?.language }}</span>
+                  }
                   @if (currentPage()?.ocr_confidence != null) {
                     <span class="muted">OCR {{ confidence(currentPage()?.ocr_confidence) }}</span>
                   }
@@ -201,6 +215,9 @@
                 @if (currentPage(); as pageRow) {
                   <div class="page-text">
                     <p class="eyebrow">Page text</p>
+                    @if (pageRow.translated_text && pageRow.original_text && pageRow.translated_text !== pageRow.original_text) {
+                      <p class="muted meta">Original language kept. English below is the working translation.</p>
+                    }
                     <div class="email-body compact">
                       @for (span of pageSpans(); track $index) {
                         @if (span.hit) {
@@ -211,6 +228,58 @@
                       }
                     </div>
                   </div>
+                  @if (pageTables().length) {
+                    <div class="page-extra">
+                      <p class="eyebrow">Tables</p>
+                      @for (table of pageTables(); track $index) {
+                        <div class="extract-table-wrap">
+                          @if (table.caption) {
+                            <p class="muted meta">{{ table.caption }}</p>
+                          }
+                          <table class="extract-table">
+                            @if (table.headers?.length) {
+                              <thead>
+                                <tr>
+                                  @for (header of table.headers; track $index) {
+                                    <th>{{ header }}</th>
+                                  }
+                                </tr>
+                              </thead>
+                            }
+                            @if (table.rows?.length) {
+                              <tbody>
+                                @for (row of table.rows; track $index) {
+                                  <tr>
+                                    @for (cell of row; track $index) {
+                                      <td>{{ tableCell(cell) }}</td>
+                                    }
+                                  </tr>
+                                }
+                              </tbody>
+                            }
+                          </table>
+                        </div>
+                      }
+                    </div>
+                  }
+                  @if (pageImageNotes().length) {
+                    <div class="page-extra">
+                      <p class="eyebrow">Image notes</p>
+                      <ul class="note-list">
+                        @for (note of pageImageNotes(); track $index) {
+                          <li>
+                            @if (note.kind) {
+                              <strong>{{ note.kind }}.</strong>
+                            }
+                            {{ note.caption || 'Meaningful image flagged for review.' }}
+                            @if (note.needs_human_review) {
+                              <span class="flag">Needs review</span>
+                            }
+                          </li>
+                        }
+                      </ul>
+                    </div>
+                  }
                 }
               }
             }

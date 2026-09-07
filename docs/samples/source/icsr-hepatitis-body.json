@@ -1,0 +1,12 @@
+{
+  "key": "icsr-hepatitis-body",
+  "subject": "[SYNTHETIC] Jaundice while on Exampletab \u2014 fictional, no PDF",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "icsr"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nPhone intake (synthetic): Riley Patel, 61-year-old man with hypertension, took Exampletab 10 mg oral daily from 2 Jan 2024 until 18 Feb 2024. He developed jaundice and was hospitalized 4 days. ALT 640. Recovering. Reporter Dr. Sam Ortiz, Spain. Height was not given. No attachment.\n",
+  "attachments": []
+}

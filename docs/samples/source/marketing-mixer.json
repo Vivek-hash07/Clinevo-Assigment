@@ -1,0 +1,12 @@
+{
+  "key": "marketing-mixer",
+  "subject": "[SYNTHETIC] Industry conference invitation \u2014 not a case",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "irrelevant"
+  ],
+  "in_demo_batch": true,
+  "body": "Join the fictional Clinevo summer science mixer. This is marketing mail and should classify as not relevant. No patient, product quality issue, or medical question is included.\n",
+  "attachments": []
+}

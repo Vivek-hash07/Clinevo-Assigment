@@ -1,0 +1,17 @@
+{
+  "key": "pqc-csv-nonpdf",
+  "subject": "[SYNTHETIC] Packing list CSV with broken seal \u2014 fictional, non-PDF",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "pqc"
+  ],
+  "in_demo_batch": false,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nSame broken-seal story as the quality complaint, but the attachment is a CSV so intake can log a non-PDF and skip it.\n",
+  "attachments": [
+    {
+      "filename": "packing-list.csv",
+      "mime": "text/csv",
+      "size_bytes": 44
+    }
+  ]
+}

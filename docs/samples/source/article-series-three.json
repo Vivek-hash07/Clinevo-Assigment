@@ -1,0 +1,19 @@
+{
+  "key": "article-series-three",
+  "subject": "[SYNTHETIC] Fictional three-patient Exampletab series",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "article",
+    "digital",
+    "icsr"
+  ],
+  "in_demo_batch": false,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nCase series with three unnamed but age/sex-identified fictional people. Split should create three cases.\n",
+  "attachments": [
+    {
+      "filename": "fictional-article-case-series.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 2068
+    }
+  ]
+}

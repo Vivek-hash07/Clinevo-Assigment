@@ -1,0 +1,19 @@
+{
+  "key": "article-pediatric",
+  "subject": "[SYNTHETIC] Fictional pediatric letter \u2014 vomiting after Examplemab",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "article",
+    "digital",
+    "icsr"
+  ],
+  "in_demo_batch": false,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nOne fictional child (age 8) is described in the attached two-column article.\n",
+  "attachments": [
+    {
+      "filename": "fictional-article-pediatric.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 2045
+    }
+  ]
+}

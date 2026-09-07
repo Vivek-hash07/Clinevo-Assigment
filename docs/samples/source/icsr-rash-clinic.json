@@ -1,0 +1,19 @@
+{
+  "key": "icsr-rash-clinic",
+  "subject": "[SYNTHETIC] Possible rash after Examplemab \u2014 fictional clinic case",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "digital",
+    "icsr"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nReporter (fictional nurse Jordan Lee, Canada) says a 54-year-old woman developed a rash and fever after Examplemab 40 mg subcutaneous. She was seen in clinic and is recovering. A made-up clinic note is attached.\n",
+  "attachments": [
+    {
+      "filename": "fictional-rash-note.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 1088
+    }
+  ]
+}

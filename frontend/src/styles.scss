@@ -512,6 +512,47 @@ textarea:focus {
   align-items: center;
 }
 
+.reason-list,
+.note-list {
+  margin: 0.45rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.reason-list li + li,
+.note-list li + li {
+  margin-top: 0.25rem;
+}
+
+.page-extra {
+  margin-top: 0.85rem;
+}
+
+.extract-table-wrap {
+  overflow-x: auto;
+  margin: 0.35rem 0 0.7rem;
+}
+
+.extract-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.extract-table th,
+.extract-table td {
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.extract-table th {
+  background: color-mix(in srgb, var(--teal) 8%, white);
+  font-weight: 600;
+}
+
 .flag {
   font-size: 0.7rem;
   letter-spacing: 0.06em;

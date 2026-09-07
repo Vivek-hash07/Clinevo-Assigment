@@ -1,0 +1,19 @@
+{
+  "key": "icsr-hospital-lt",
+  "subject": "[SYNTHETIC] Hospitalization after Exampletab \u2014 fictional discharge note",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "digital",
+    "icsr"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nPlease review the attached fictional discharge summary. Same case as the phone intake but the PDF is the source of record for page citations.\n",
+  "attachments": [
+    {
+      "filename": "fictional-hospital-note.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 1132
+    }
+  ]
+}

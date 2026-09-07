@@ -25,6 +25,39 @@ export function categoryChip(category: string): CategoryChip {
   return { short: category, key: 'other', full: category };
 }
 
+export function statusLabel(status: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    pending: 'Pending',
+    processing: 'Processing',
+    ready: 'Ready',
+    reviewed: 'Reviewed',
+    error: 'Error',
+    failed: 'Failed',
+    queued: 'Queued',
+    succeeded: 'Done',
+    skipped: 'Skipped',
+  };
+  const key = (status || '').toLowerCase();
+  return labels[key] || status || '';
+}
+
+export function sourceLabel(source: string | null | undefined): string {
+  switch (source) {
+    case 'fixture':
+      return 'Sample';
+    case 'upload':
+      return 'Uploaded PDF';
+    case 'split':
+      return 'Split case';
+    case 'gmail':
+      return 'Gmail';
+    case 'imap':
+      return 'IMAP';
+    default:
+      return '';
+  }
+}
+
 export function formatDuration(ms: number | null | undefined): string {
   if (ms == null || Number.isNaN(ms) || ms < 0) {
     return '';

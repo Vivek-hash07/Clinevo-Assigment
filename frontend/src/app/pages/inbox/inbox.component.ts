@@ -20,6 +20,8 @@ import {
   confidenceTone,
   formatConfidence,
   formatDuration,
+  sourceLabel,
+  statusLabel,
 } from '../../core/review.util';
 
 const EMPTY_COUNTS: QueueCounts = {
@@ -71,12 +73,10 @@ export class InboxComponent implements OnInit, OnDestroy {
   imapHost = '';
   imapFolder = 'INBOX';
 
-  emailCopy = false;
-
   readonly mailboxLabel = computed(() => {
     const connected = this.mailProviders().filter((row) => row.connected && row.sync_enabled);
     if (!connected.length) {
-      return 'Sample emails — no sync needed';
+      return 'Sample emails';
     }
     return connected
       .map((row) => `${row.label}${row.email ? ` · ${row.email}` : ''}`)
@@ -107,7 +107,7 @@ export class InboxComponent implements OnInit, OnDestroy {
       this.showMailbox.set(true);
       this.noticeKind.set('warn');
       this.notice.set(
-        'Google did not grant mailbox access for this account. Use IMAP below with your own app password, or add this email as a test user on the OAuth consent screen.',
+        'Google is still verifying clinevo-api.onrender.com (Error 403 while the OAuth app is in Testing). Load sample emails to continue — that is the assignment path.',
       );
       void this.router.navigate([], { queryParams: {}, replaceUrl: true });
     }
@@ -206,7 +206,7 @@ export class InboxComponent implements OnInit, OnDestroy {
       this.showMailbox.set(true);
       this.noticeKind.set('warn');
       this.notice.set(
-        'Mailbox sync is optional. Use Load sample emails for the assignment batch, or open Advanced to connect your inbox.',
+        'Load sample emails to fill the queue. Live Gmail send and sync are available after Google verifies clinevo-api.onrender.com.',
       );
       return;
     }
@@ -232,7 +232,7 @@ export class InboxComponent implements OnInit, OnDestroy {
     }
     this.loadingFixtures.set(true);
     this.notice.set('');
-    this.queue.loadFixtures(this.emailCopy).subscribe({
+    this.queue.loadFixtures(false).subscribe({
       next: (res) => {
         this.loadingFixtures.set(false);
         this.noticeKind.set(res.ok ? 'ok' : 'warn');
@@ -403,6 +403,18 @@ export class InboxComponent implements OnInit, OnDestroy {
 
   duration(item: QueueItem): string {
     return formatDuration(item.duration_ms);
+  }
+
+  statusText(status: string | null | undefined): string {
+    return statusLabel(status);
+  }
+
+  sourceText(source: string | null | undefined): string {
+    return sourceLabel(source);
+  }
+
+  jobStatus(job: JobItem): string {
+    return statusLabel(job.status);
   }
 
   summaryLine(item: QueueItem): string {

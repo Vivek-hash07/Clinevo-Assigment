@@ -1,0 +1,19 @@
+{
+  "key": "article-no-patient",
+  "subject": "[SYNTHETIC] Fictional methods paper \u2014 no patient case",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "article",
+    "digital",
+    "irrelevant"
+  ],
+  "in_demo_batch": false,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nMethods-only toy paper. Literature screening should answer no identifiable patient case.\n",
+  "attachments": [
+    {
+      "filename": "fictional-article-methods-only.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 2180
+    }
+  ]
+}

@@ -252,7 +252,7 @@ def drain_queue(max_seconds: int = 1800) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Day 6 synthetic fixtures, batch run, and export.")
+    parser = argparse.ArgumentParser(description="Synthetic fixtures, batch run, and export of extracted JSON + timings.")
     parser.add_argument("--write-pdfs", action="store_true", help="Write catalog PDFs under artifacts/day6/pdfs")
     parser.add_argument("--export-dir", default=str(DEFAULT_EXPORT), help="Export directory")
     parser.add_argument("--user-email", help="Account that should own the local batch")
@@ -272,9 +272,9 @@ def main() -> int:
     dest.mkdir(parents=True, exist_ok=True)
     coverage = coverage_payload()
     (dest / "coverage.json").write_text(json.dumps(coverage, indent=2), encoding="utf-8")
-    print("Day 6 coverage:", json.dumps(coverage, indent=2))
+    print("Sample coverage:", json.dumps(coverage, indent=2))
     if not coverage["meets_day6"]:
-        print("Coverage is below the Day 6 required counts.", file=sys.stderr)
+        print("Coverage is below the required sample counts.", file=sys.stderr)
         return 1
 
     if args.write_pdfs:

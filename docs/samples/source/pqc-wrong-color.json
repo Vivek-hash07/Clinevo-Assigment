@@ -1,0 +1,19 @@
+{
+  "key": "pqc-wrong-color",
+  "subject": "[SYNTHETIC] Syringe liquid is brown \u2014 fictional quality complaint",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "digital",
+    "pqc"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nPharmacist (synthetic): Examplemab 40 mg lot EX-1188 looks brown, not colorless. Not injected. No adverse event. Asking for a replacement. PQC only.\n",
+  "attachments": [
+    {
+      "filename": "fictional-wrong-color.pdf",
+      "mime": "application/pdf",
+      "size_bytes": 999
+    }
+  ]
+}

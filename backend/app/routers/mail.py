@@ -276,8 +276,8 @@ def seed_synthetic(user: CurrentUser, db: DbSession) -> SeedSyntheticOut:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
-                "SMTP is not configured, so sample mail cannot be sent. "
-                "Use \"Load local fixtures\" to put the same documents in the queue without email."
+                "SMTP is not configured, so sample mail cannot be sent yet. "
+                "Use Load sample emails — it puts the same documents in the queue without Gmail."
             ),
         ) from exc
     except Exception:
@@ -299,7 +299,7 @@ def seed_synthetic(user: CurrentUser, db: DbSession) -> SeedSyntheticOut:
         count=result["count"],
         sent=result["sent"],
         message=(
-            f"Sent {result['count']} synthetic emails to {mailbox} (Day 6 batch). "
+            f"Sent {result['count']} synthetic emails to {mailbox}. "
             "Wait about 15 seconds, then sync the mailbox."
         ),
     )

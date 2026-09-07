@@ -1,0 +1,12 @@
+{
+  "key": "mi-with-food",
+  "subject": "[SYNTHETIC] Can Exampletab be taken with breakfast? \u2014 fictional MI",
+  "sender_name": "Fictional Reporter",
+  "tags": [
+    "batch",
+    "mi"
+  ],
+  "in_demo_batch": true,
+  "body": "This is synthetic mailbox data for the Clinevo reviewer prototype. No real patient, reporter, or product complaint is described.\n\nHello medical information (synthetic request),\n\nCan Exampletab 10 mg be taken with breakfast, and is there an interaction with omeprazole?\nNo adverse event and no product defect is being reported.\n",
+  "attachments": []
+}

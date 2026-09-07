@@ -24,6 +24,8 @@ import {
   formatConfidence,
   formatDuration,
   highlightSpans,
+  sourceLabel,
+  statusLabel,
 } from '../../core/review.util';
 
 @Component({
@@ -136,6 +138,45 @@ export class ReviewComponent implements OnInit, OnDestroy {
 
   duration(ms: number | null | undefined): string {
     return formatDuration(ms);
+  }
+
+  statusText(status: string | null | undefined): string {
+    return statusLabel(status);
+  }
+
+  sourceText(source: string | null | undefined): string {
+    return sourceLabel(source);
+  }
+
+  pageTables(): Array<{ caption?: string; headers?: string[]; rows?: unknown[][] }> {
+    const tables = this.currentPage()?.tables;
+    if (!Array.isArray(tables)) {
+      return [];
+    }
+    return tables.filter((item) => item && typeof item === 'object') as Array<{
+      caption?: string;
+      headers?: string[];
+      rows?: unknown[][];
+    }>;
+  }
+
+  pageImageNotes(): Array<{ kind?: string; caption?: string; needs_human_review?: boolean }> {
+    const notes = this.currentPage()?.image_notes;
+    if (!Array.isArray(notes)) {
+      return [];
+    }
+    return notes.filter((item) => item && typeof item === 'object') as Array<{
+      kind?: string;
+      caption?: string;
+      needs_human_review?: boolean;
+    }>;
+  }
+
+  tableCell(value: unknown): string {
+    if (value == null) {
+      return '';
+    }
+    return String(value);
   }
 
   eventLabel(event: AuditEvent): string {
