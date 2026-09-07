@@ -5,6 +5,8 @@ export interface AuthUser {
   avatar_url: string | null;
   google_linked: boolean;
   gmail_connected: boolean;
+  imap_connected?: boolean;
+  mail_connected?: boolean;
   auth_provider: string;
 }
 
@@ -195,9 +197,64 @@ export interface ReviewRequest {
 export interface SyncMailResult {
   ok: boolean;
   queued: boolean;
-  gmail_connected: boolean;
+  mail_connected: boolean;
+  gmail_connected?: boolean;
   message: string;
+  providers?: string[];
   queued_event_ids?: string[];
+}
+
+export interface MailProviderStatus {
+  provider: 'gmail' | 'imap';
+  label: string;
+  connected: boolean;
+  sync_enabled: boolean;
+  email: string | null;
+  last_synced_at: string | null;
+  last_error: string | null;
+  host?: string | null;
+  port?: number | null;
+  folder?: string | null;
+}
+
+export interface MailStatus {
+  connected: boolean;
+  providers: MailProviderStatus[];
+}
+
+export interface ImapConnectResult {
+  ok: boolean;
+  host: string;
+  port: number;
+  folder: string;
+  message_count: number;
+  message: string;
+}
+
+export interface JobItem {
+  id: string;
+  kind: string;
+  label: string;
+  status: string;
+  attempts: number;
+  max_attempts: number;
+  message_id: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  last_error: string | null;
+}
+
+export interface QueueHealth {
+  worker_running: boolean;
+  concurrency: number;
+  processed: number;
+  failed: number;
+  uptime_seconds: number;
+  mailbox_poll_seconds: number;
+  counts: Record<string, number>;
+  jobs: JobItem[];
 }
 
 export interface SeedSyntheticResult {
@@ -215,6 +272,8 @@ export interface FixtureLoadResult {
   message_ids: string[];
   keys: string[];
   queued_event_ids?: string[];
+  emailed_count?: number;
+  emailed_to?: string | null;
   message: string;
 }
 

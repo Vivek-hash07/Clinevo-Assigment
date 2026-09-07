@@ -120,8 +120,10 @@ def revoke_refresh_token(db: Session, token: str | None) -> None:
 
 def user_to_out(user: User) -> UserOut:
     cred = user.gmail_credential
+    account = user.imap_account
     google_linked = bool(user.google_sub)
     gmail_connected = bool(cred and cred.refresh_token_encrypted and cred.sync_enabled)
+    imap_connected = bool(account and account.password_encrypted and account.sync_enabled)
     if google_linked and not user.password_hash:
         provider = "google"
     elif user.password_hash and google_linked:
@@ -137,6 +139,8 @@ def user_to_out(user: User) -> UserOut:
         avatar_url=user.avatar_url,
         google_linked=google_linked,
         gmail_connected=gmail_connected,
+        imap_connected=imap_connected,
+        mail_connected=gmail_connected or imap_connected,
         auth_provider=provider,
     )
 

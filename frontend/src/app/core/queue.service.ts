@@ -13,6 +13,9 @@ import {
   FixtureLoadResult,
   UploadResult,
   LiteratureSplitResult,
+  MailStatus,
+  ImapConnectResult,
+  QueueHealth,
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -47,15 +50,54 @@ export class QueueService {
   }
 
   syncMail(): Observable<SyncMailResult> {
-    return this.http.post<SyncMailResult>(`${this.api}/api/gmail/sync`, {});
+    return this.http.post<SyncMailResult>(`${this.api}/api/mail/sync`, {});
   }
 
   seedSynthetic(): Observable<SeedSyntheticResult> {
-    return this.http.post<SeedSyntheticResult>(`${this.api}/api/gmail/seed`, {});
+    return this.http.post<SeedSyntheticResult>(`${this.api}/api/mail/seed`, {});
   }
 
-  loadFixtures(): Observable<FixtureLoadResult> {
-    return this.http.post<FixtureLoadResult>(`${this.api}/api/fixtures/load`, {});
+  mailStatus(): Observable<MailStatus> {
+    return this.http.get<MailStatus>(`${this.api}/api/mail/status`);
+  }
+
+  testImap(body: {
+    email: string;
+    app_password: string;
+    host?: string;
+    port?: number;
+    folder?: string;
+  }): Observable<ImapConnectResult> {
+    return this.http.post<ImapConnectResult>(`${this.api}/api/mail/imap/test`, body);
+  }
+
+  connectImap(body: {
+    email: string;
+    app_password: string;
+    host?: string;
+    port?: number;
+    folder?: string;
+  }): Observable<ImapConnectResult> {
+    return this.http.post<ImapConnectResult>(`${this.api}/api/mail/imap/connect`, body);
+  }
+
+  disconnectImap(): Observable<{ ok: boolean; message: string }> {
+    return this.http.post<{ ok: boolean; message: string }>(`${this.api}/api/mail/imap/disconnect`, {});
+  }
+
+  disconnectGmail(): Observable<{ ok: boolean; message: string }> {
+    return this.http.post<{ ok: boolean; message: string }>(`${this.api}/api/mail/gmail/disconnect`, {});
+  }
+
+  jobs(limit = 8): Observable<QueueHealth> {
+    return this.http.get<QueueHealth>(`${this.api}/api/jobs`, { params: { limit } });
+  }
+
+  loadFixtures(emailCopy = false): Observable<FixtureLoadResult> {
+    return this.http.post<FixtureLoadResult>(`${this.api}/api/fixtures/load`, {
+      batch: true,
+      email_copy: emailCopy,
+    });
   }
 
   uploadPdfs(files: File[], subject?: string, note?: string): Observable<UploadResult> {

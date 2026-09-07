@@ -15,13 +15,14 @@ from app.constants import (
     PROMPT_LITERATURE,
     SOURCE_SPLIT,
     SOURCE_UPLOAD,
+    STATUS_PROCESSING,
     STATUS_REVIEWED,
 )
 from app.models import Attachment, Message, User
 from app.services.ai_pack import build_message_pack, load_message_for_ai
 from app.services.ai_pipeline import _finish_run, _start_run, _structured_call
 from app.services.audit import write_audit
-from app.services.llm import LlmError
+from app.services.llm import LlmError, get_llm_client
 from app.services.local_ingest import copy_attachment_with_pages
 
 
@@ -66,7 +67,7 @@ def should_auto_screen(message: Message) -> bool:
     return False
 
 
-def screen_literature(message_id: str, inngest_run_id: str | None = None) -> dict[str, Any]:
+def screen_literature(message_id: str, run_id: str | None = None) -> dict[str, Any]:
     from app.database import session_scope
 
     settings = get_settings()
@@ -78,7 +79,7 @@ def screen_literature(message_id: str, inngest_run_id: str | None = None) -> dic
             function_name="ai/literature-screen",
             message_id=message_id,
             prompt_version=PROMPT_LITERATURE,
-            inngest_run_id=inngest_run_id,
+            run_id=run_id,
             started=started,
         )
         if message is None:

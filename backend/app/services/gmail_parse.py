@@ -1,62 +1,32 @@
+"""Turn a Gmail REST `Message` resource (format=full) into a `ParsedMessage`."""
+
 from __future__ import annotations
 
 import base64
-import hashlib
-import re
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from email.utils import parseaddr, parsedate_to_datetime
-from html import unescape
-from html.parser import HTMLParser
+from email.utils import parseaddr
 
-from app.constants import PDF_MIME_TYPES
+from app.services.mail_types import (
+    ParsedAttachment,
+    ParsedMessage,
+    checksum_bytes,
+    checksum_meta,
+    html_to_text,
+    is_pdf,
+    normalize_mime,
+    parse_date_header,
+)
 
-_BODY_WHITESPACE = re.compile(r"[ \t]+\n")
-_MULTI_NEWLINE = re.compile(r"\n{3,}")
-
-
-class _HTMLTextExtractor(HTMLParser):
-    _SKIP = frozenset({"script", "style", "head"})
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self._chunks: list[str] = []
-        self._skip_depth = 0
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in self._SKIP:
-            self._skip_depth += 1
-            return
-        if self._skip_depth:
-            return
-        if tag in {"p", "div", "br", "tr", "li", "h1", "h2", "h3"}:
-            self._chunks.append("\n")
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in self._SKIP and self._skip_depth:
-            self._skip_depth -= 1
-
-    def handle_data(self, data: str) -> None:
-        if self._skip_depth:
-            return
-        text = data.strip()
-        if text:
-            self._chunks.append(text)
-
-    def text(self) -> str:
-        joined = " ".join(self._chunks)
-        joined = _BODY_WHITESPACE.sub("\n", joined)
-        return _MULTI_NEWLINE.sub("\n\n", joined).strip()
-
-
-def html_to_text(html: str) -> str:
-    parser = _HTMLTextExtractor()
-    try:
-        parser.feed(unescape(html))
-        parser.close()
-    except Exception:
-        return re.sub(r"<[^>]+>", " ", html).strip()
-    return parser.text()
+__all__ = [
+    "ParsedAttachment",
+    "ParsedMessage",
+    "checksum_bytes",
+    "checksum_meta",
+    "decode_gmail_data",
+    "header_map",
+    "parse_gmail_message",
+    "parse_sent_at",
+]
 
 
 def decode_gmail_data(data: str | None) -> bytes:
@@ -75,68 +45,13 @@ def header_map(payload: dict) -> dict[str, str]:
     return values
 
 
-def normalize_mime(mime: str | None) -> str:
-    return (mime or "application/octet-stream").split(";", 1)[0].strip().lower()
-
-
-def is_pdf(filename: str, mime: str) -> bool:
-    if normalize_mime(mime) in PDF_MIME_TYPES:
-        return True
-    return filename.lower().endswith(".pdf")
-
-
-def checksum_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def checksum_meta(*parts: str) -> str:
-    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
-
-
 def parse_sent_at(headers: dict[str, str], internal_ms: str | None) -> datetime | None:
     if internal_ms:
         try:
             return datetime.fromtimestamp(int(internal_ms) / 1000, tz=UTC)
         except (TypeError, ValueError, OSError, OverflowError):
             pass
-    raw = headers.get("date")
-    if not raw:
-        return None
-    try:
-        parsed = parsedate_to_datetime(raw)
-    except (TypeError, ValueError, IndexError):
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed
-
-
-@dataclass
-class ParsedAttachment:
-    filename: str
-    mime: str
-    is_pdf: bool
-    size_bytes: int | None = None
-    attachment_id: str | None = None
-    inline_data: bytes | None = None
-
-
-@dataclass
-class ParsedMessage:
-    gmail_id: str
-    thread_id: str
-    sender: str
-    subject: str
-    sent_at: datetime | None
-    snippet: str
-    body_text: str
-    body_html: str | None
-    label_ids: list[str] = field(default_factory=list)
-    attachments: list[ParsedAttachment] = field(default_factory=list)
-
-    @property
-    def is_inbox(self) -> bool:
-        return "INBOX" in set(self.label_ids)
+    return parse_date_header(headers.get("date"))
 
 
 def _walk_parts(node: dict) -> list[dict]:
@@ -206,8 +121,9 @@ def parse_gmail_message(raw: dict) -> ParsedMessage:
     body_text, body_html = _collect_bodies(parts)
     sender_name, sender_email = parseaddr(headers.get("from", ""))
     sender = headers.get("from") or sender_email or sender_name
+    label_ids = list(raw.get("labelIds") or [])
     return ParsedMessage(
-        gmail_id=raw.get("id") or "",
+        provider_message_id=raw.get("id") or "",
         thread_id=raw.get("threadId") or "",
         sender=sender.strip(),
         subject=(headers.get("subject") or "").strip(),
@@ -215,6 +131,7 @@ def parse_gmail_message(raw: dict) -> ParsedMessage:
         snippet=(raw.get("snippet") or "").strip(),
         body_text=body_text.strip(),
         body_html=body_html,
-        label_ids=list(raw.get("labelIds") or []),
+        in_inbox="INBOX" in set(label_ids),
+        label_ids=label_ids,
         attachments=_collect_attachments(parts),
     )

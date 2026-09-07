@@ -42,6 +42,9 @@ class User(Base):
     gmail_credential: Mapped[GmailCredential | None] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    imap_account: Mapped[ImapAccount | None] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 class PasswordResetToken(Base):
@@ -94,6 +97,35 @@ class GmailCredential(Base):
     user: Mapped[User] = relationship(back_populates="gmail_credential")
 
 
+class ImapAccount(Base):
+    """Mailbox connected over IMAP with an app password, instead of Google OAuth."""
+
+    __tablename__ = "imap_accounts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    email: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    host: Mapped[str] = mapped_column(String(255), nullable=False, default="imap.gmail.com")
+    port: Mapped[int] = mapped_column(Integer, nullable=False, default=993)
+    use_ssl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    folder: Mapped[str] = mapped_column(String(255), nullable=False, default="INBOX")
+    sync_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # IMAP UIDs are only meaningful within one uid_validity generation.
+    last_uid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    uid_validity: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="imap_account")
+
+
 class Message(Base):
     __tablename__ = "messages"
 
@@ -101,8 +133,10 @@ class Message(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    gmail_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    gmail_thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Stable per-mailbox id: Gmail message id, or "<uid_validity>:<uid>" for IMAP.
+    provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mail_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     sender: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     subject: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -132,7 +166,9 @@ class Message(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    __table_args__ = (UniqueConstraint("user_id", "gmail_message_id", name="uq_messages_user_gmail_id"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider_message_id", name="uq_messages_user_provider_msg"),
+    )
 
     attachments: Mapped[list[Attachment]] = relationship(back_populates="message", cascade="all, delete-orphan")
     classifications: Mapped[list[Classification]] = relationship(
@@ -158,7 +194,7 @@ class Attachment(Base):
     skipped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     skip_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     storage_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    gmail_attachment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_attachment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     document_flavor: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -289,7 +325,7 @@ class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    inngest_run_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    run_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     message_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
     )
@@ -301,3 +337,40 @@ class PipelineRun(Base):
     prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class QueueJob(Base):
+    """A unit of pipeline work. Postgres is the queue: claims use FOR UPDATE SKIP LOCKED."""
+
+    __tablename__ = "queue_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # NULL means "always enqueue". Otherwise deduplicated against queued/running jobs.
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    message_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    run_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+    locked_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parent_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

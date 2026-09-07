@@ -9,24 +9,22 @@ from app.config import Settings, get_settings
 from app.models import GmailCredential
 from app.security import decrypt_secret, encrypt_secret
 from app.services.audit import write_audit
+from app.services.mail_errors import MailAuthError, MailCursorExpired, MailProviderError
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 
 
-class GmailAuthError(Exception):
+class GmailAuthError(MailAuthError):
     """Refresh token is missing, revoked, or otherwise unusable."""
 
 
-class GmailHistoryExpired(Exception):
+class GmailHistoryExpired(MailCursorExpired):
     """Gmail no longer has history for the stored cursor; do a bounded inbox list."""
 
 
-class GmailApiError(Exception):
-    def __init__(self, status_code: int, detail: str) -> None:
-        super().__init__(detail)
-        self.status_code = status_code
-        self.detail = detail
+class GmailApiError(MailProviderError):
+    """Gmail returned an error that may be transient."""
 
 
 def _decrypt_optional(value: str | None) -> str | None:
@@ -137,7 +135,7 @@ class GmailClient:
         history_id = str(profile.get("historyId") or "")
         ids: list[str] = []
         page_token: str | None = None
-        limit = max(1, self.settings.gmail_sync_max_messages)
+        limit = max(1, self.settings.mail_sync_max_messages)
         while len(ids) < limit:
             params: dict[str, str | int] = {
                 "q": "in:inbox",
@@ -162,7 +160,7 @@ class GmailClient:
         ids: list[str] = []
         page_token: str | None = None
         latest = start_history_id
-        limit = max(1, self.settings.gmail_sync_max_messages)
+        limit = max(1, self.settings.mail_sync_max_messages)
         while len(ids) < limit:
             params: dict[str, str | int] = {
                 "startHistoryId": start_history_id,

@@ -6,7 +6,17 @@ from sqlalchemy.sql.schema import Column
 
 from app.database import Base, engine
 
-MIGRATION_VERSION = 10
+MIGRATION_VERSION = 12
+
+# Columns renamed after Inngest was replaced by the in-process queue and after mail
+# intake gained a second provider (IMAP). Applied before create_all so the ORM does
+# not see them as missing and re-add the old names.
+_RENAMES = (
+    ("pipeline_runs", "inngest_run_id", "run_id"),
+    ("messages", "gmail_message_id", "provider_message_id"),
+    ("messages", "gmail_thread_id", "provider_thread_id"),
+    ("attachments", "gmail_attachment_id", "provider_attachment_id"),
+)
 
 
 def _has_column(conn, table: str, column: str) -> bool:
@@ -37,6 +47,21 @@ def _drop_legacy_received_at(conn) -> None:
     else:
         conn.execute(text("ALTER TABLE messages RENAME COLUMN received_at TO sent_at"))
     conn.execute(text("ALTER TABLE messages ALTER COLUMN sent_at DROP NOT NULL"))
+
+
+def _apply_renames(conn) -> None:
+    for table, old, new in _RENAMES:
+        present = conn.execute(text("SELECT to_regclass(:name)"), {"name": f"public.{table}"}).scalar()
+        if not present:
+            continue
+        if not _has_column(conn, table, old):
+            continue
+        if _has_column(conn, table, new):
+            # Both exist (create_all ran before this migration): carry values over and drop the old one.
+            conn.execute(text(f'UPDATE "{table}" SET "{new}" = "{old}" WHERE "{new}" IS NULL'))
+            conn.execute(text(f'ALTER TABLE "{table}" DROP COLUMN "{old}"'))
+            continue
+        conn.execute(text(f'ALTER TABLE "{table}" RENAME COLUMN "{old}" TO "{new}"'))
 
 
 def _default_clause(column: Column) -> str:
@@ -81,6 +106,7 @@ def ensure_schema() -> None:
         ).scalar()
         if applied:
             return
+        _apply_renames(conn)
 
     Base.metadata.create_all(bind=engine)
     pg = postgresql.dialect()
@@ -148,12 +174,19 @@ def ensure_schema() -> None:
                 "ON refresh_tokens (token_hash)"
             )
         )
+        # create_all made this a table constraint; the rename above left it pointing at
+        # the renamed column, so drop it and re-create under the provider-neutral name.
+        conn.execute(text("ALTER TABLE messages DROP CONSTRAINT IF EXISTS uq_messages_user_gmail_id"))
+        conn.execute(text("DROP INDEX IF EXISTS uq_messages_user_gmail_id"))
         conn.execute(
             text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_user_gmail_id "
-                "ON messages (user_id, gmail_message_id) "
-                "WHERE gmail_message_id IS NOT NULL"
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_user_provider_msg "
+                "ON messages (user_id, provider_message_id) "
+                "WHERE provider_message_id IS NOT NULL"
             )
+        )
+        conn.execute(
+            text("UPDATE messages SET mail_provider = 'gmail' WHERE mail_provider IS NULL AND provider_message_id IS NOT NULL")
         )
         conn.execute(
             text(
@@ -213,6 +246,25 @@ def ensure_schema() -> None:
                 "AND refresh_token_encrypted <> '' "
                 "AND sync_enabled = false"
             )
+        )
+        # Queue dedup: at most one live job per idempotency key. Finished jobs drop out of
+        # the index, so a deliberate re-run of the same document is still allowed.
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_queue_jobs_active_key "
+                "ON queue_jobs (idempotency_key) "
+                "WHERE idempotency_key IS NOT NULL AND status IN ('queued', 'running')"
+            )
+        )
+        # Supports the claim query: WHERE status = 'queued' AND run_after <= now().
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_queue_jobs_claim "
+                "ON queue_jobs (status, run_after, priority DESC, created_at)"
+            )
+        )
+        conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_queue_jobs_created_at ON queue_jobs (created_at DESC)")
         )
         conn.execute(
             text(

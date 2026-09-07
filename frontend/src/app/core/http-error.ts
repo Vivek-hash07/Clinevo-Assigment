@@ -12,7 +12,12 @@ export function readHttpError(err: HttpErrorResponse, fallback: string): string 
       .join(' ');
   }
   if (err.status === 0) {
-    return 'Cannot reach the API. Is the backend running?';
+    return 'Cannot reach the API. Is the backend running on port 8080?';
+  }
+  if (err.status === 503) {
+    return typeof detail === 'string' && detail.trim()
+      ? detail
+      : 'The database is temporarily unavailable. Wait a few seconds and try again.';
   }
   if (err.status === 401) {
     return 'Your session expired. Please sign in again.';

@@ -103,7 +103,7 @@
         <div class="review-source">
           <article class="panel" id="email-cite">
             <header class="panel-head">
-              <h2>{{ item.source === 'gmail' || !item.source ? 'Email' : 'Source text' }}</h2>
+              <h2>{{ item.source === 'gmail' || item.source === 'imap' || !item.source ? 'Email' : 'Source text' }}</h2>
               @if (highlightTarget() === 'email') {
                 <span class="flag">Source highlighted</span>
               }

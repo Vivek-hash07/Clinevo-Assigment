@@ -174,7 +174,28 @@ def google_callback(request: Request, db: DbSession, settings: AppSettings) -> R
     except Exception:
         return RedirectResponse(_frontend_redirect("/sign-in", error="oauth_failed"), status_code=302)
 
-    dest = _frontend_redirect(next_path)
+    extra: dict[str, str] = {}
+    if intent == "gmail":
+        cred = user.gmail_credential
+        if cred and cred.refresh_token_encrypted and cred.sync_enabled:
+            extra["mail"] = "connected"
+            from app.jobqueue import store as queue_store
+            from app.jobqueue.handlers import KIND_MAIL_SYNC
+            from app.jobqueue.types import JobEvent
+
+            queue_store.enqueue(
+                JobEvent(
+                    kind=KIND_MAIL_SYNC,
+                    payload={"user_id": str(user.id), "trigger": "gmail_oauth"},
+                    idempotency_key=f"mail-sync-manual-{user.id}",
+                    user_id=str(user.id),
+                    max_attempts=2,
+                    priority=10,
+                )
+            )
+        else:
+            extra["mail"] = "denied"
+    dest = _frontend_redirect(next_path, **extra)
     response = RedirectResponse(dest, status_code=status.HTTP_302_FOUND)
     set_auth_cookies(response, db, user.id, settings)
     response.delete_cookie(

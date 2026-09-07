@@ -38,7 +38,7 @@ Continue with Google only asks for **openid, email, profile**. That is enough fo
 
 If status stays **Testing**, Google will only allow emails you add as testers. Publishing is what opens it to every Google account.
 
-**Gmail mailbox sync** uses the restricted `gmail.readonly` scope. Google will still block that for the public until you complete Gmail API verification. Sign-in does not wait on that. After login, use **Sync my mail** to grant mailbox access. Tokens are encrypted at rest; Inngest refreshes access tokens without keeping the user in the tab.
+**Gmail mailbox sync via OAuth** uses the restricted `gmail.readonly` scope. Google blocks that for unverified apps. Sign-in does not wait on that. After login, connect **IMAP + a Gmail app password** (recommended) or try **Connect Gmail OAuth** if your Cloud project already has test users. Tokens and app passwords are encrypted at rest. An in-process worker on FastAPI polls the mailbox every two minutes.
 
 **Authorized JavaScript origins** (this is the origin)
 
@@ -80,36 +80,57 @@ npm start
 
 Tables are created on API startup.
 
-## Gmail intake (Day 2)
+## Mail intake (assignment path)
 
-After Google sign-in, use **Sync my mail** once. That requests `gmail.readonly`, stores the Gmail **refresh token encrypted** (Fernet, key from `TOKEN_ENCRYPTION_KEY`), and enables background sync.
+The assignment asks for **synthetic / dummy emails** (Day 6), not a live Gmail sync. That is the default:
 
-Enable the **Gmail API** on the same Google Cloud project as the OAuth client.
+1. Sign in.
+2. Optionally tick **Also send a copy via SMTP** (Amazon Mail Manager from `smtp-credentials.csv` → Render `SMTP_*`).
+3. Click **Load sample emails**. The Day 6 batch (ICSR, PQC, MI, articles, scans, non-English) lands in the reviewer queue and the AI pipeline runs.
+4. SMTP, if checked, emails the same dummy messages to **your** address. The app does **not** read them back.
 
-### Inngest (required for sync)
+| Path | When to use | UI |
+|---|---|---|
+| **Load sample emails** | Required demo / Day 6 batch | Inbox → Load sample emails |
+| **SMTP copy** | Optional proof that outbound mail works | Tick “Also send a copy” |
+| **Upload PDF** | Literature bonus | Inbox → Upload PDF |
+| **Advanced mail** | Optional live IMAP / Gmail | Inbox → Advanced mail |
 
-Local:
+### IMAP (recommended mailbox path)
 
-```bash
-npx inngest-cli@latest dev -u http://localhost:8080/api/inngest
-```
+Google’s Gmail API scope is restricted. IMAP is the production-ready workaround for a 7-day prototype:
 
-Keep FastAPI on **8080** and `INNGEST_DEV=1` in `backend/.env`. The Dev Server UI is http://localhost:8288.
+1. Google Account → **Security** → turn on **2-Step Verification**.
+2. Search **App passwords** → create one named `Clinevo`.
+3. In the app, enter the Gmail address and the 16-character password (spaces are stripped).
+4. Host defaults to `imap.gmail.com:993`, folder `INBOX`.
+5. **Test connection**, then **Connect IMAP**. The first sync is queued automatically.
+
+The app password is encrypted with `TOKEN_ENCRYPTION_KEY` (Fernet) and is only used to read mail.
+
+Works with Outlook / Yahoo / Fastmail too — set the IMAP host if it is not Gmail.
+
+### Gmail OAuth (optional)
+
+Enable the **Gmail API** on the same Google Cloud project as the OAuth client. After sign-in, **Connect Gmail OAuth** requests `gmail.readonly`. Google will refuse unverified apps except listed test users.
+
+### In-process queue (no Inngest)
+
+FastAPI starts a worker thread pool on boot. Jobs live in Postgres (`queue_jobs`). The inbox **pipeline strip** shows stage, status, duration, and the last error.
 
 What runs:
 
-1. `gmail/sync` — cron every 2 minutes, fans out one job per connected mailbox.
-2. `gmail/sync mailbox` — Gmail History API when we have a cursor; otherwise a bounded inbox list. Enqueues each Gmail message id.
-3. `email/ingest` — fetches sender, subject, date, body, PDF bytes; logs non-PDF attachments; upserts by `(user_id, gmail_message_id)`; fans out each PDF.
-4. `pdf/process` — flavor detect, digital extract or OCR/vision, language + translation, store `pdf_pages`. Emits `pdf/extracted` when every PDF on the message is done (Day 4 hook).
+1. `mail/sync` — every 2 minutes (and on **Sync my mail**), one job per connected mailbox.
+2. `mail/sync.mailbox` — Gmail History API or IMAP UID cursor; enqueues each new message id.
+3. `email/received` — fetch sender, subject, date, body, PDF bytes; log non-PDFs; upsert by `(user_id, provider_message_id)`.
+4. `pdf/attached` — flavor, digital extract or OCR/vision, language + translation, `pdf_pages`.
+5. `ai/understand` → `ai/classify` → `ai/extract` → optional `literature/screen`.
 
-Manual **Sync my mail** sends `gmail/sync.mailbox` immediately. Re-runs are idempotent.
-
-Production: unset `INNGEST_DEV`, set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`, and point Inngest Cloud at `https://<api>/api/inngest`.
+Manual **Sync my mail** posts `POST /api/mail/sync`. Re-runs are idempotent while a job is still queued or running.
 
 ### Synthetic test mail
 
-Only made-up content. From the inbox, **Send sample mail**, or:
+Only made-up content. From the inbox, **Send sample mail** (needs SMTP + a connected mailbox), or skip mail and **Load local fixtures**.
 
 ```bash
 cd backend
@@ -117,7 +138,7 @@ source .venv/bin/activate
 python -m app.scripts.seed_mailbox you@gmail.com
 ```
 
-Wait ~15 seconds for Gmail to accept the messages, then sync. One sample includes a CSV so you can confirm non-PDFs are logged and skipped.
+Wait ~15 seconds for the mailbox to accept the messages, then sync. One sample includes a CSV so you can confirm non-PDFs are logged and skipped.
 
 ### Reviewer queue API
 
@@ -127,7 +148,7 @@ Statuses: **pending** (ingested, PDFs extracted), **processing** (pipeline runni
 
 ## PDF step 1 (Day 3)
 
-After `email/ingest` stores a PDF, Inngest runs **`pdf/process`** (one job per attachment, idempotent on message id + checksum).
+After `email/received` or **Upload PDF** stores a file, the worker runs **`pdf/attached`** (one job per attachment, idempotent on message id + checksum).
 
 1. **Flavor detector** — local signals (text-layer density, images, columns) plus OpenRouter confirmation.
 2. **Digital pages** — `pdfplumber` text (column-aware for articles) and real table grids. OpenRouter cleans, scores, and repairs tables if the local grid is empty or ragged.
@@ -170,7 +191,7 @@ All mailbox and PDF samples are **made-up**. There is no real patient data.
 **Load 15 documents into the reviewer queue (no Gmail):**
 
 1. Sign in at http://localhost:8000
-2. Keep FastAPI on 8080 and Inngest Dev Server running
+2. Keep FastAPI on 8080 (the in-process worker starts with the API)
 3. Click **Load local fixtures**
 
 Or from the backend venv:

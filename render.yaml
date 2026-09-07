@@ -20,7 +20,7 @@ services:
       - key: BACKEND_URL
         value: https://clinevo-api.onrender.com
       - key: FRONTEND_URL
-        sync: false
+        value: https://clienvo.vercel.app
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET

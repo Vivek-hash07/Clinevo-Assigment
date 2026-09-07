@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import logging
 from urllib.parse import quote
-import time
 
-import inngest
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy import case, func, select
@@ -11,7 +10,9 @@ from sqlalchemy.orm import selectinload
 
 from app.constants import QUEUE_STATUSES
 from app.deps import CurrentUser, DbSession
-from app.inngest_client import inngest_client
+from app.jobqueue import store as queue_store
+from app.jobqueue.handlers import KIND_LITERATURE_SCREEN
+from app.jobqueue.types import JobEvent
 from app.models import Attachment, AuditEvent, ExtractedField, Message, PdfPage, PipelineRun, Review
 from app.schemas import (
     AuditEventOut,
@@ -46,6 +47,7 @@ from app.services.review import (
 from app.services.storage import read_bytes
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
+logger = logging.getLogger(__name__)
 
 _MESSAGE_DETAIL_OPTIONS = (
     selectinload(Message.attachments),
@@ -212,7 +214,8 @@ def _detail_out(db: DbSession, row: Message) -> QueueDetailOut:
         **base.model_dump(),
         body=row.body,
         body_html=row.body_html,
-        gmail_message_id=row.gmail_message_id,
+        provider_message_id=row.provider_message_id,
+        mail_provider=row.mail_provider,
         attachments=[
             QueueAttachmentOut(
                 id=str(item.id),
@@ -353,17 +356,21 @@ def queue_literature_screen(message_id: str, user: CurrentUser, db: DbSession) -
     row.literature_screened_at = None
     db.commit()
     try:
-        inngest_client.send_sync(
-            inngest.Event(
-                name="literature/screen",
-                id=f"literature-screen-{row.id}-{int(time.time())}",
-                data={"message_id": row.id, "user_id": user.id},
+        queue_store.enqueue(
+            JobEvent(
+                kind=KIND_LITERATURE_SCREEN,
+                payload={"message_id": row.id, "user_id": str(user.id)},
+                idempotency_key=f"literature-screen-{row.id}",
+                user_id=str(user.id),
+                message_id=str(row.id),
+                priority=5,
             )
         )
     except Exception:
+        logger.exception("Failed to queue literature screening for %s", row.id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not queue literature screening. Is Inngest running?",
+            detail="Literature screening could not be queued. The database may be unreachable.",
         ) from None
     return MessageOut(ok=True, message="Literature screening queued. Refresh in a few seconds.")
 
@@ -402,9 +409,10 @@ def split_literature(message_id: str, user: CurrentUser, db: DbSession) -> Liter
         for child in children:
             queued.extend(enqueue_message_pipeline(str(user.id), child))
     except Exception:
+        logger.exception("Failed to queue split cases for %s", row.id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Cases were created but classify/extract could not be queued. Start Inngest and split again.",
+            detail="Cases were created but classify/extract could not be queued. Retry the split.",
         ) from None
     return LiteratureSplitOut(
         ok=True,

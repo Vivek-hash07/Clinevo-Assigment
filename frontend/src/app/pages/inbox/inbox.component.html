@@ -9,18 +9,15 @@
     </div>
 
     <div class="top-actions">
-      <button type="button" class="btn ghost" (click)="loadFixtures()" [disabled]="loadingFixtures()">
-        {{ loadingFixtures() ? 'Loading fixtures…' : 'Load local fixtures' }}
+      <button type="button" class="btn primary" (click)="loadFixtures()" [disabled]="loadingFixtures()">
+        {{ loadingFixtures() ? 'Loading samples…' : 'Load sample emails' }}
       </button>
       <label class="btn ghost upload-btn">
         {{ uploading() ? 'Uploading…' : 'Upload PDF' }}
-        <input type="file" accept="application/pdf" multiple hidden [disabled]="uploading()" (change)="uploadPdfs($event)" />
+        <input type="file" accept="application/pdf,.pdf" multiple hidden [disabled]="uploading()" (change)="uploadPdfs($event)" />
       </label>
-      <button type="button" class="btn ghost" (click)="seedMailbox()" [disabled]="seeding()">
-        {{ seeding() ? 'Sending samples…' : 'Send sample mail' }}
-      </button>
-      <button type="button" class="btn ghost" (click)="syncMail()" [disabled]="syncing()">
-        {{ syncing() ? 'Checking mailbox…' : 'Sync my mail' }}
+      <button type="button" class="btn ghost" (click)="showMailbox.set(!showMailbox())">
+        {{ showMailbox() ? 'Hide advanced mail' : 'Advanced mail' }}
       </button>
       <div class="who">
         <span>{{ auth.user()?.name || auth.user()?.email }}</span>
@@ -34,12 +31,12 @@
       <div>
         <h1>Reviewer queue</h1>
         <p class="muted">
-          Open a ready case to read the email, inspect the PDF, and accept or override extracted
-          facts. Every action is timestamped.
+          Load the assignment’s synthetic sample emails (ICSR, PQC, MI, articles, scans). SMTP can
+          also send you a copy. Open a ready case to accept or override extracted facts.
         </p>
       </div>
-      <div class="status-pill" [class.on]="auth.user()?.gmail_connected">
-        {{ auth.user()?.gmail_connected ? 'Mailbox connected' : 'Mailbox not connected' }}
+      <div class="status-pill" [class.on]="mailConnected()">
+        {{ mailboxLabel() }}
       </div>
     </div>
 
@@ -47,6 +44,148 @@
       <div class="banner" [class.error]="noticeKind() === 'warn'" [class.ok]="noticeKind() === 'ok'">
         {{ notice() }}
       </div>
+    }
+
+    <label class="email-copy">
+      <input type="checkbox" name="emailCopy" [(ngModel)]="emailCopy" />
+      Also send a copy to {{ auth.user()?.email }} via SMTP
+    </label>
+
+    @if (showMailbox()) {
+      <section class="mailbox-panel" aria-label="Mailbox connection">
+        <header class="panel-head">
+          <div>
+            <p class="eyebrow">Your mailbox</p>
+            <h2>Each reviewer connects their own inbox</h2>
+          </div>
+        </header>
+        <p class="muted">
+          There is no shared password. Sign in, then connect <strong>your</strong> Gmail (or Outlook /
+          Yahoo). We store only your tokens, encrypted, and sync that mailbox into your queue.
+        </p>
+
+        <div class="connect-paths">
+          <article class="connect-card">
+            <p class="eyebrow">One click</p>
+            <h3>Connect my Gmail</h3>
+            <p class="muted">
+              Google asks you to allow read-only access to <em>your</em> mail. After you accept,
+              sync starts automatically.
+            </p>
+            @if (gmailAccount()?.connected && gmailAccount()?.sync_enabled) {
+              <p class="muted meta">Connected as {{ gmailAccount()?.email }}</p>
+              @if (gmailAccount()?.last_error) {
+                <p class="err-inline">{{ gmailAccount()?.last_error }}</p>
+              }
+              <div class="field-actions">
+                <button type="button" class="btn primary" (click)="syncMail()" [disabled]="syncing()">
+                  Sync now
+                </button>
+                <button type="button" class="btn ghost" (click)="disconnectGmail()" [disabled]="disconnectingGmail()">
+                  {{ disconnectingGmail() ? 'Disconnecting…' : 'Disconnect Gmail' }}
+                </button>
+              </div>
+            } @else {
+              <button type="button" class="btn primary" (click)="connectGmail()">
+                Continue with my Google account
+              </button>
+              <p class="muted meta">
+                If Google blocks the mailbox scope (unverified app), use IMAP on the right. Add
+                reviewer emails as test users on the OAuth consent screen to make one-click work.
+              </p>
+            }
+          </article>
+
+          <article class="connect-card">
+            <p class="eyebrow">Works for any Gmail / Outlook user</p>
+            <h3>IMAP with my app password</h3>
+            @if (imapAccount()?.connected && imapAccount()?.sync_enabled) {
+              <p class="muted meta">
+                IMAP connected as {{ imapAccount()?.email }}
+                @if (imapAccount()?.host) {
+                  · {{ imapAccount()?.host }}:{{ imapAccount()?.port }}
+                }
+              </p>
+              @if (imapAccount()?.last_error) {
+                <p class="err-inline">{{ imapAccount()?.last_error }}</p>
+              }
+              <div class="field-actions">
+                <button type="button" class="btn primary" (click)="syncMail()" [disabled]="syncing()">
+                  Sync now
+                </button>
+                <button type="button" class="btn ghost" (click)="disconnectImap()" [disabled]="disconnectingImap()">
+                  {{ disconnectingImap() ? 'Disconnecting…' : 'Disconnect IMAP' }}
+                </button>
+              </div>
+            } @else {
+              <form class="imap-form" (ngSubmit)="connectImap()">
+                <label>
+                  Your mailbox email
+                  <input type="email" name="imapEmail" [(ngModel)]="imapEmail" autocomplete="username" placeholder="you@gmail.com" />
+                </label>
+                <label>
+                  Your app password
+                  <input
+                    type="password"
+                    name="imapPassword"
+                    [(ngModel)]="imapPassword"
+                    autocomplete="current-password"
+                    placeholder="xxxx xxxx xxxx xxxx"
+                  />
+                </label>
+                <label>
+                  IMAP host (optional)
+                  <input type="text" name="imapHost" [(ngModel)]="imapHost" placeholder="imap.gmail.com" />
+                </label>
+                <label>
+                  Folder
+                  <input type="text" name="imapFolder" [(ngModel)]="imapFolder" placeholder="INBOX" />
+                </label>
+                <div class="field-actions">
+                  <button type="button" class="btn ghost" (click)="testImap()" [disabled]="testingImap()">
+                    {{ testingImap() ? 'Testing…' : 'Test connection' }}
+                  </button>
+                  <button type="submit" class="btn primary" [disabled]="connectingImap()">
+                    {{ connectingImap() ? 'Connecting…' : 'Connect my mailbox' }}
+                  </button>
+                </div>
+              </form>
+              <ol class="howto">
+                <li>Use the same address you want to sync — not someone else’s.</li>
+                <li>Gmail: Security → 2-Step Verification → App passwords → create one named Clinevo.</li>
+                <li>Outlook / Yahoo: create an app password for that account, and set the IMAP host if needed.</li>
+              </ol>
+            }
+          </article>
+        </div>
+      </section>
+    }
+
+    @if (recentJobs().length || !workerRunning()) {
+      <section class="pipeline-strip" aria-label="Processing pipeline">
+        <p class="muted meta">
+          Worker {{ workerRunning() ? 'running' : 'not running' }}
+          @if (!workerRunning()) {
+            — restart FastAPI so uploads and mailbox sync can process.
+          }
+        </p>
+        @if (recentJobs().length) {
+          <ul class="job-list">
+            @for (job of recentJobs(); track job.id) {
+              <li>
+                <span class="chip" [attr.data-status]="job.status">{{ job.status }}</span>
+                <span>{{ job.label || job.kind }}</span>
+                @if (jobDuration(job)) {
+                  <span class="muted">{{ jobDuration(job) }}</span>
+                }
+                @if (job.last_error) {
+                  <span class="err-inline">{{ job.last_error }}</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
     }
 
     <nav class="queue-filters" aria-label="Queue status">
@@ -85,8 +224,9 @@
         <p class="eyebrow">Nothing here</p>
         <h2>No messages in this view</h2>
         <p>
-          Load the Day 6 synthetic batch into this queue (no Gmail required), or upload an article PDF
-          for literature screening. Connect Gmail only if you want the same samples delivered to the mailbox.
+          Click <strong>Load sample emails</strong> for the Day 6 synthetic batch (reactions, quality
+          complaints, medical questions, articles, scans). Optionally tick “Also send a copy” so SMTP
+          delivers the same dummy messages to your address. Upload a PDF for the literature bonus.
         </p>
       </div>
     } @else {

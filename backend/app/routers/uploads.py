@@ -10,12 +10,14 @@ from sqlalchemy import select
 from app.constants import SOURCE_FIXTURE
 from app.deps import CurrentUser, DbSession
 from app.models import Message
-from app.schemas import FixtureCoverageOut, FixtureLoadOut, UploadOut
+from app.schemas import FixtureCoverageOut, FixtureLoadOut, FixtureLoadRequest, UploadOut
+from app.services.audit import write_audit
 from app.services.local_ingest import LocalIngestError, enqueue_message_pipeline, ingest_uploads, load_fixture_messages
 from app.services.synthetic import (
     batch_keys,
     catalog_coverage,
     required_coverage_ok,
+    send_synthetic_mailbox,
     synthetic_catalog,
 )
 
@@ -23,17 +25,16 @@ router = APIRouter(tags=["fixtures"])
 logger = logging.getLogger(__name__)
 
 
-def _enqueue_or_503(user_id: str, message: Message, *, retry: bool = False) -> list[str]:
+def _enqueue_or_503(user_id: str, message: Message) -> list[str]:
     try:
-        return enqueue_message_pipeline(user_id, message, retry=retry)
+        return enqueue_message_pipeline(user_id, message)
     except Exception:
         logger.exception("Failed to enqueue pipeline for %s", message.id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
-                "The document was saved but the pipeline could not be queued. "
-                "Start the Inngest Dev Server (npx inngest-cli@latest dev -u "
-                "http://localhost:8080/api/inngest) and try again."
+                "The document was saved but could not be added to the processing queue. "
+                "The database may be unreachable — retry from the queue in a moment."
             ),
         ) from None
 
@@ -53,8 +54,18 @@ def fixture_coverage(user: CurrentUser, db: DbSession) -> FixtureCoverageOut:
 
 
 @router.post("/api/fixtures/load", response_model=FixtureLoadOut)
-def load_fixtures(user: CurrentUser, db: DbSession, batch: bool = True) -> FixtureLoadOut:
-    keys = batch_keys() if batch else [item.key for item in synthetic_catalog()]
+def load_fixtures(
+    user: CurrentUser,
+    db: DbSession,
+    body: FixtureLoadRequest | None = None,
+) -> FixtureLoadOut:
+    """Assignment Day 6 path: put synthetic emails in the queue. No mailbox sync.
+
+    Optional email_copy uses SMTP (Amazon Mail Manager) to send the same dummy
+    messages to the signed-in user. The queue does not wait for those to be read back.
+    """
+    payload = body or FixtureLoadRequest()
+    keys = batch_keys() if payload.batch else [item.key for item in synthetic_catalog()]
     try:
         rows = load_fixture_messages(db, user, keys, source=SOURCE_FIXTURE)
         db.commit()
@@ -65,7 +76,31 @@ def load_fixtures(user: CurrentUser, db: DbSession, batch: bool = True) -> Fixtu
     for row in rows:
         if row.status in {"ready", "reviewed"}:
             continue
-        queued.extend(_enqueue_or_503(str(user.id), row, retry=True))
+        queued.extend(_enqueue_or_503(str(user.id), row))
+
+    emailed_count = 0
+    emailed_to: str | None = None
+    email_note = ""
+    if payload.email_copy:
+        try:
+            result = send_synthetic_mailbox(user.email, keys)
+            emailed_count = int(result["count"])
+            emailed_to = str(result["to"])
+            write_audit(
+                db,
+                "mail.synthetic_copy_sent",
+                user.id,
+                {"to": emailed_to, "count": emailed_count, "keys": keys},
+            )
+            db.commit()
+            email_note = f" SMTP also sent {emailed_count} copy(ies) to {emailed_to}."
+        except Exception:
+            logger.exception("SMTP copy of dummy emails failed for %s", user.email)
+            email_note = (
+                " The reviewer queue is loaded. SMTP could not send a copy — "
+                "check SMTP_* on the API host."
+            )
+
     return FixtureLoadOut(
         ok=True,
         queued=bool(queued),
@@ -73,9 +108,12 @@ def load_fixtures(user: CurrentUser, db: DbSession, batch: bool = True) -> Fixtu
         message_ids=[str(row.id) for row in rows],
         keys=[str(row.fixture_key or "") for row in rows],
         queued_event_ids=queued,
+        emailed_count=emailed_count,
+        emailed_to=emailed_to,
         message=(
-            f"Loaded {len(rows)} synthetic messages into the reviewer queue and queued the Inngest pipeline. "
-            "This path does not use Gmail."
+            f"Loaded {len(rows)} synthetic sample emails and queued {len(queued)} job(s). "
+            "No mailbox sync is required."
+            f"{email_note}"
         ),
     )
 
@@ -100,11 +138,23 @@ async def upload_pdfs(
     except LocalIngestError as exc:
         db.rollback()
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception:
+        db.rollback()
+        logger.exception("PDF upload failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The PDF could not be saved. Check the API logs and try again.",
+        ) from None
     event_ids = _enqueue_or_503(str(user.id), message)
+    names = ", ".join(name for name, _ in blobs[:3])
+    extra = f" and {len(blobs) - 3} more" if len(blobs) > 3 else ""
     return UploadOut(
         ok=True,
-        queued=True,
+        queued=bool(event_ids),
         message_id=str(message.id),
         queued_event_ids=event_ids,
-        message="PDF uploaded. It will appear in the same reviewer queue when the pipeline finishes.",
+        message=(
+            f"Saved {names}{extra}. The in-process worker is extracting text, classifying, "
+            "and extracting facts — open the new queue item when its status is ready."
+        ),
     )

@@ -2,21 +2,24 @@
 
 from __future__ import annotations
 
-import time
 from datetime import UTC, datetime
 
-import inngest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.constants import SOURCE_FIXTURE, SOURCE_UPLOAD, STATUS_PROCESSING, STATUS_READY, STATUS_REVIEWED
-from app.inngest_client import inngest_client
+from app.jobqueue import store as queue_store
+from app.jobqueue.handlers import KIND_EMAIL_INGESTED, KIND_PDF_ATTACHED
+from app.jobqueue.types import JobEvent
 from app.models import Attachment, Message, PdfPage, User
 from app.services.audit import write_audit
-from app.services.gmail_parse import checksum_bytes
+from app.services.mail_types import checksum_bytes
 from app.services import storage
 from app.services.synthetic import SyntheticEmail, catalog_by_key, synthetic_catalog
+
+_PDF_MAGIC = b"%PDF"
+_MAX_UPLOAD_FILES = 12
 
 
 class LocalIngestError(Exception):
@@ -52,38 +55,41 @@ def _pdf_payload(message: Message) -> list[dict[str, str]]:
     return rows
 
 
-def enqueue_message_pipeline(user_id: str, message: Message, *, retry: bool = False) -> list[str]:
+def enqueue_message_pipeline(user_id: str, message: Message) -> list[str]:
+    """Kick off the pipeline for a message that did not come from a mailbox.
+
+    Idempotency keys only collide with jobs that are still queued or running, so
+    re-submitting a finished document re-runs it while a double click does not.
+    """
     pdfs = _pdf_payload(message)
-    suffix = f"-{int(time.time()) // 60}" if retry else ""
-    events: list[inngest.Event]
     if pdfs:
         events = [
-            inngest.Event(
-                name="pdf/attached",
-                id=f"pdf-{message.id}-{item['checksum']}{suffix}",
-                data={
+            JobEvent(
+                kind=KIND_PDF_ATTACHED,
+                payload={
                     "user_id": user_id,
                     "message_id": message.id,
                     "attachment_id": item["id"],
                     "checksum": item["checksum"],
                     "filename": item.get("filename"),
                 },
+                idempotency_key=f"pdf-{message.id}-{item['checksum']}",
+                user_id=user_id,
+                message_id=message.id,
             )
             for item in pdfs
         ]
     else:
         events = [
-            inngest.Event(
-                name="email/ingested",
-                id=f"email-ingested-{message.id}{suffix}",
-                data={"message_id": message.id, "user_id": user_id},
+            JobEvent(
+                kind=KIND_EMAIL_INGESTED,
+                payload={"message_id": message.id, "user_id": user_id},
+                idempotency_key=f"email-ingested-{message.id}",
+                user_id=user_id,
+                message_id=message.id,
             )
         ]
-    ids: list[str] = []
-    for event in events:
-        result = inngest_client.send_sync(event)
-        ids.extend(list(result or []))
-    return ids
+    return queue_store.enqueue(events)
 
 
 def _store_pdf(
@@ -217,6 +223,20 @@ def load_fixture_messages(
     return rows
 
 
+def _assert_pdf_bytes(filename: str, data: bytes) -> None:
+    name = (filename or "upload.pdf").strip() or "upload.pdf"
+    if not name.lower().endswith(".pdf"):
+        raise LocalIngestError(f"{name} is not a PDF. Only PDFs are processed.")
+    if not data:
+        raise LocalIngestError(f"{name} is empty.")
+    head = data[:1024]
+    if _PDF_MAGIC not in head:
+        raise LocalIngestError(
+            f"{name} does not look like a PDF (missing %PDF header). "
+            "Export or re-save the file as PDF and try again."
+        )
+
+
 def ingest_uploads(
     db: Session,
     user: User,
@@ -227,8 +247,12 @@ def ingest_uploads(
 ) -> Message:
     if not files:
         raise LocalIngestError("Upload at least one PDF.")
+    if len(files) > _MAX_UPLOAD_FILES:
+        raise LocalIngestError(f"Upload at most {_MAX_UPLOAD_FILES} PDFs at a time.")
     settings = get_settings()
     names = [name for name, _ in files]
+    for filename, data in files:
+        _assert_pdf_bytes(filename, data)
     body = (note or "").strip() or (
         "Uploaded outside Gmail for literature screening. Synthetic / test documents only. "
         f"Files: {', '.join(names)}."
@@ -248,12 +272,10 @@ def ingest_uploads(
     checksums: set[str] = set()
     stored = 0
     for filename, data in files:
-        if not filename.lower().endswith(".pdf"):
-            raise LocalIngestError(f"{filename} is not a PDF. Only PDFs are processed.")
         if _store_pdf(db, message, filename, data, checksums):
             stored += 1
     if stored == 0:
-        raise LocalIngestError("Those PDFs were empty or already attached.")
+        raise LocalIngestError("Those PDFs were empty or already attached to this upload.")
     write_audit(
         db,
         "upload.received",

@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     database_url: str
+    # Resolve the DB host to IPv4 before connecting. Set false only if the database is
+    # reachable exclusively over IPv6.
+    db_prefer_ipv4: bool = True
     jwt_secret: str
     token_encryption_key: str
 
@@ -78,10 +81,6 @@ class Settings(BaseSettings):
             errors.append("JWT_SECRET and TOKEN_ENCRYPTION_KEY must each be at least 32 characters")
         if not all((self.smtp_host, self.smtp_user, self.smtp_password, self.smtp_from)):
             errors.append("SMTP_HOST, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM are required")
-        if self.inngest_dev:
-            errors.append("INNGEST_DEV must be false")
-        if not self.inngest_signing_key:
-            errors.append("INNGEST_SIGNING_KEY is required")
         if not self.openrouter_api_key:
             errors.append("OPENROUTER_API_KEY is required")
         if errors:
@@ -105,11 +104,22 @@ class Settings(BaseSettings):
     google_scopes: str = Field(default="openid email profile")
     gmail_scope: str = Field(default="https://www.googleapis.com/auth/gmail.readonly")
 
-    inngest_app_id: str = "clinevo-smart-inbox"
-    inngest_dev: bool = True
-    inngest_event_key: str = ""
-    inngest_signing_key: str = ""
-    gmail_sync_max_messages: int = 50
+    # In-process queue. Set QUEUE_WORKER_ENABLED=false to run an API-only instance
+    # (e.g. one Render service serving HTTP, another running workers).
+    queue_worker_enabled: bool = True
+    queue_worker_concurrency: int = 3
+    # How long a claimed job may run before another worker may reclaim it.
+    queue_lease_seconds: int = 900
+    queue_poll_interval_seconds: float = 0.5
+    queue_purge_after_days: int = 7
+    # 0 disables the recurring mailbox poll (manual "Sync mail" still works).
+    mail_sync_interval_seconds: int = 120
+    mail_sync_max_messages: int = 50
+
+    imap_default_host: str = "imap.gmail.com"
+    imap_default_port: int = 993
+    imap_default_folder: str = "INBOX"
+
     attachment_max_bytes: int = 20 * 1024 * 1024
     attachment_dir: str = str(BACKEND_DIR / "var" / "attachments")
     message_body_max_chars: int = 500_000

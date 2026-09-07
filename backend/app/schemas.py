@@ -43,6 +43,8 @@ class UserOut(BaseModel):
     avatar_url: str | None
     google_linked: bool
     gmail_connected: bool
+    imap_connected: bool = False
+    mail_connected: bool = False
     auth_provider: str
 
     model_config = {"from_attributes": True}
@@ -69,17 +71,47 @@ class MessageOut(BaseModel):
 class SyncMailOut(BaseModel):
     ok: bool
     queued: bool
-    gmail_connected: bool
+    mail_connected: bool
     message: str
+    providers: list[str] = []
     queued_event_ids: list[str] = []
 
 
-class GmailStatusOut(BaseModel):
+class MailProviderOut(BaseModel):
+    provider: Literal["gmail", "imap"]
+    label: str
     connected: bool
     sync_enabled: bool
-    gmail_email: str | None
-    last_synced_at: str | None
-    last_error: str | None
+    email: str | None = None
+    last_synced_at: str | None = None
+    last_error: str | None = None
+    host: str | None = None
+    port: int | None = None
+    folder: str | None = None
+
+
+class MailStatusOut(BaseModel):
+    connected: bool
+    providers: list[MailProviderOut]
+
+
+class ImapConnectRequest(BaseModel):
+    email: EmailStr
+    # Gmail shows app passwords as "abcd efgh ijkl mnop"; spaces are stripped server-side.
+    app_password: str = Field(min_length=8, max_length=512)
+    host: str | None = Field(default=None, max_length=255)
+    port: int | None = Field(default=None, ge=1, le=65535)
+    folder: str | None = Field(default=None, max_length=255)
+    use_ssl: bool = True
+
+
+class ImapTestOut(BaseModel):
+    ok: bool
+    host: str
+    port: int
+    folder: str
+    message_count: int = 0
+    message: str
 
 
 class SeedSyntheticOut(BaseModel):
@@ -97,6 +129,11 @@ class LiteratureCaseOut(BaseModel):
     source_ref: str = ""
 
 
+class FixtureLoadRequest(BaseModel):
+    batch: bool = True
+    email_copy: bool = False
+
+
 class FixtureLoadOut(BaseModel):
     ok: bool
     queued: bool
@@ -104,6 +141,8 @@ class FixtureLoadOut(BaseModel):
     message_ids: list[str]
     keys: list[str]
     queued_event_ids: list[str] = []
+    emailed_count: int = 0
+    emailed_to: str | None = None
     message: str
 
 
@@ -290,10 +329,37 @@ class QueueListOut(BaseModel):
     offset: int
 
 
+class JobOut(BaseModel):
+    id: str
+    kind: str
+    label: str = ""
+    status: str
+    attempts: int = 0
+    max_attempts: int = 0
+    message_id: str | None = None
+    created_at: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int | None = None
+    last_error: str | None = None
+
+
+class QueueHealthOut(BaseModel):
+    worker_running: bool
+    concurrency: int
+    processed: int = 0
+    failed: int = 0
+    uptime_seconds: int = 0
+    mailbox_poll_seconds: int = 0
+    counts: dict[str, int] = {}
+    jobs: list[JobOut] = []
+
+
 class QueueDetailOut(QueueItemOut):
     body: str
     body_html: str | None = None
-    gmail_message_id: str | None = None
+    provider_message_id: str | None = None
+    mail_provider: str | None = None
     attachments: list[QueueAttachmentOut]
     extracted_fields: list[ExtractedFieldOut] = []
     field_groups: list[FieldGroupOut] = []

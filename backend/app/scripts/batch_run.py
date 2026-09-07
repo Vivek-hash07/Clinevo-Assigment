@@ -212,12 +212,56 @@ def wait_for_batch(user_email: str, keys: list[str], timeout_s: int) -> list[str
     return sorted(pending)
 
 
+def drain_queue(max_seconds: int = 1800) -> None:
+    """Run the worker pool here until nothing is queued or running.
+
+    The workers normally live inside the FastAPI process; this lets the batch run
+    standalone (CI, or a laptop with the API stopped).
+    """
+    from app.jobqueue import store as queue_store
+    from app.jobqueue.worker import QueueWorker
+
+    worker = QueueWorker(
+        concurrency=3,
+        lease_seconds=900,
+        poll_interval=0.25,
+        sync_interval_seconds=0,  # no mailbox polling during a fixture batch
+        purge_after_days=0,
+    )
+    worker.start()
+    deadline = time.time() + max_seconds
+    try:
+        # Give the first claim a moment so we do not read an empty queue immediately.
+        time.sleep(2)
+        while time.time() < deadline:
+            counts = queue_store.counts_by_status()
+            outstanding = counts.get("queued", 0) + counts.get("running", 0)
+            print(
+                f"  queue: {outstanding} outstanding "
+                f"(done {counts.get('succeeded', 0)}, skipped {counts.get('skipped', 0)}, "
+                f"failed {counts.get('failed', 0)})",
+                flush=True,
+            )
+            if outstanding == 0:
+                break
+            time.sleep(5)
+        else:
+            print(f"Queue did not drain within {max_seconds}s", file=sys.stderr)
+    finally:
+        worker.stop()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Day 6 synthetic fixtures, batch run, and export.")
     parser.add_argument("--write-pdfs", action="store_true", help="Write catalog PDFs under artifacts/day6/pdfs")
     parser.add_argument("--export-dir", default=str(DEFAULT_EXPORT), help="Export directory")
     parser.add_argument("--user-email", help="Account that should own the local batch")
-    parser.add_argument("--load", action="store_true", help="Insert the 15-document batch into Postgres and enqueue Inngest")
+    parser.add_argument("--load", action="store_true", help="Insert the 15-document batch into Postgres and queue the pipeline")
+    parser.add_argument(
+        "--work",
+        action="store_true",
+        help="Run queue workers in this process until the queue drains (use when the API is not running)",
+    )
     parser.add_argument("--wait", type=int, default=0, help="Seconds to wait for ready status before export")
     parser.add_argument("--export", action="store_true", help="Write extracted JSON + timing table for the user")
     parser.add_argument("--mail", help="Also SMTP-send the batch to this Gmail address")
@@ -256,10 +300,13 @@ def main() -> int:
                 if row.status in {"ready", "reviewed"}:
                     continue
                 try:
-                    enqueue_message_pipeline(str(user.id), row, retry=True)
+                    enqueue_message_pipeline(str(user.id), row)
                 except Exception as exc:
-                    print(f"Inngest enqueue failed for {row.fixture_key}: {exc}", file=sys.stderr)
+                    print(f"Queue enqueue failed for {row.fixture_key}: {exc}", file=sys.stderr)
             print(f"Loaded {len(rows)} messages for {args.user_email}")
+
+    if args.work:
+        drain_queue(max_seconds=args.wait or 1800)
 
     if args.wait:
         if not args.user_email:

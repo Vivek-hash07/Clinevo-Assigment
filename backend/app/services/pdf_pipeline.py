@@ -372,7 +372,7 @@ def merge_page_result(
     )
 
 
-def inspect_pdf_attachment(attachment_id: str, inngest_run_id: str | None = None) -> dict[str, Any]:
+def inspect_pdf_attachment(attachment_id: str, run_id: str | None = None) -> dict[str, Any]:
     from app.database import session_scope
 
     settings = get_settings()
@@ -383,7 +383,7 @@ def inspect_pdf_attachment(attachment_id: str, inngest_run_id: str | None = None
             return {"skip": True, "reason": "missing_attachment"}
         message = db.get(Message, attachment.message_id)
         run = PipelineRun(
-            inngest_run_id=inngest_run_id,
+            run_id=run_id,
             message_id=attachment.message_id,
             function_name="pdf/process",
             started_at=started,
@@ -490,7 +490,7 @@ def inspect_pdf_attachment(attachment_id: str, inngest_run_id: str | None = None
 def process_pdf_page(
     attachment_id: str,
     page_number: int,
-    inngest_run_id: str | None = None,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     from app.database import session_scope
 
@@ -585,7 +585,7 @@ def process_pdf_page(
                 "model": merged.model,
                 "usage": merged.usage,
                 "latency_ms": latency_ms,
-                "inngest_run_id": inngest_run_id,
+                "run_id": run_id,
                 "source_ref": merged.source_ref,
             },
             message_id=attachment.message_id,
@@ -636,7 +636,7 @@ def _upsert_page(db: Session, attachment: Attachment, extracted: PageExtract) ->
     return row
 
 
-def finalize_pdf_attachment(attachment_id: str, inngest_run_id: str | None = None) -> dict[str, Any]:
+def finalize_pdf_attachment(attachment_id: str, run_id: str | None = None) -> dict[str, Any]:
     from app.database import session_scope
 
     finished = datetime.now(UTC)
@@ -656,11 +656,11 @@ def finalize_pdf_attachment(attachment_id: str, inngest_run_id: str | None = Non
         attachment.processed = True
         attachment.processed_at = finished
         run = None
-        if inngest_run_id:
+        if run_id:
             run = db.scalar(
                 select(PipelineRun)
                 .where(
-                    PipelineRun.inngest_run_id == inngest_run_id,
+                    PipelineRun.run_id == run_id,
                     PipelineRun.function_name == "pdf/process",
                 )
                 .order_by(PipelineRun.created_at.desc())
@@ -717,7 +717,7 @@ def finalize_pdf_attachment(attachment_id: str, inngest_run_id: str | None = Non
         }
 
 
-def mark_pdf_failed(attachment_id: str, inngest_run_id: str | None, reason: str) -> dict[str, Any]:
+def mark_pdf_failed(attachment_id: str, run_id: str | None, reason: str) -> dict[str, Any]:
     from app.database import session_scope
 
     with session_scope() as db:
@@ -737,11 +737,11 @@ def mark_pdf_failed(attachment_id: str, inngest_run_id: str | None, reason: str)
         # Leave the message pending so the reviewer queue is not stuck in processing.
         if message is not None:
             message.status = STATUS_PENDING
-        if inngest_run_id:
+        if run_id:
             run = db.scalar(
                 select(PipelineRun)
                 .where(
-                    PipelineRun.inngest_run_id == inngest_run_id,
+                    PipelineRun.run_id == run_id,
                     PipelineRun.function_name == "pdf/process",
                 )
                 .order_by(PipelineRun.created_at.desc())

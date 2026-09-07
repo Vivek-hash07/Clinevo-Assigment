@@ -47,11 +47,11 @@ def _start_run(
     function_name: str,
     message_id: str,
     prompt_version: str,
-    inngest_run_id: str | None,
+    run_id: str | None,
     started: datetime,
 ) -> PipelineRun:
     run = PipelineRun(
-        inngest_run_id=inngest_run_id,
+        run_id=run_id,
         message_id=message_id,
         function_name=function_name,
         started_at=started,
@@ -124,7 +124,7 @@ def _protected_fields(db: Session, message_id: str) -> set[str]:
     return {name for name in rows if name}
 
 
-def understand_message(message_id: str, inngest_run_id: str | None = None) -> dict[str, Any]:
+def understand_message(message_id: str, run_id: str | None = None) -> dict[str, Any]:
     from app.database import session_scope
 
     settings = get_settings()
@@ -136,7 +136,7 @@ def understand_message(message_id: str, inngest_run_id: str | None = None) -> di
             function_name="ai/understand",
             message_id=message_id,
             prompt_version=PROMPT_UNDERSTAND,
-            inngest_run_id=inngest_run_id,
+            run_id=run_id,
             started=started,
         )
         if message is None:
@@ -213,7 +213,7 @@ def understand_message(message_id: str, inngest_run_id: str | None = None) -> di
         }
 
 
-def classify_message(message_id: str, inngest_run_id: str | None = None) -> dict[str, Any]:
+def classify_message(message_id: str, run_id: str | None = None) -> dict[str, Any]:
     from app.database import session_scope
 
     settings = get_settings()
@@ -225,7 +225,7 @@ def classify_message(message_id: str, inngest_run_id: str | None = None) -> dict
             function_name="ai/classify",
             message_id=message_id,
             prompt_version=PROMPT_CLASSIFY,
-            inngest_run_id=inngest_run_id,
+            run_id=run_id,
             started=started,
         )
         if message is None:
@@ -289,7 +289,7 @@ def classify_message(message_id: str, inngest_run_id: str | None = None) -> dict
         }
 
 
-def extract_facts(message_id: str, inngest_run_id: str | None = None) -> dict[str, Any]:
+def extract_facts(message_id: str, run_id: str | None = None) -> dict[str, Any]:
     from app.database import session_scope
 
     settings = get_settings()
@@ -301,7 +301,7 @@ def extract_facts(message_id: str, inngest_run_id: str | None = None) -> dict[st
             function_name="ai/extract",
             message_id=message_id,
             prompt_version="extract_v1",
-            inngest_run_id=inngest_run_id,
+            run_id=run_id,
             started=started,
         )
         if message is None:
@@ -418,7 +418,7 @@ def extract_facts(message_id: str, inngest_run_id: str | None = None) -> dict[st
         }
 
 
-def mark_ai_failed(message_id: str, inngest_run_id: str | None, reason: str) -> dict[str, Any]:
+def mark_ai_failed(message_id: str, run_id: str | None, reason: str) -> dict[str, Any]:
     from app.database import session_scope
 
     with session_scope() as db:
@@ -428,11 +428,11 @@ def mark_ai_failed(message_id: str, inngest_run_id: str | None, reason: str) -> 
         if message.status != STATUS_REVIEWED:
             message.status = STATUS_PENDING
             message.needs_human_review = True
-        if inngest_run_id:
+        if run_id:
             run = db.scalar(
                 select(PipelineRun)
                 .where(
-                    PipelineRun.inngest_run_id == inngest_run_id,
+                    PipelineRun.run_id == run_id,
                     PipelineRun.function_name.in_(("ai/understand", "ai/classify", "ai/extract")),
                 )
                 .order_by(PipelineRun.created_at.desc())
@@ -446,7 +446,7 @@ def mark_ai_failed(message_id: str, inngest_run_id: str | None, reason: str) -> 
             db,
             "ai.failed",
             message.user_id,
-            {"reason": reason, "inngest_run_id": inngest_run_id},
+            {"reason": reason, "run_id": run_id},
             message_id=message.id,
         )
         return {"ok": True, "reason": reason}
