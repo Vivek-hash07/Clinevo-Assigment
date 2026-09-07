@@ -55,6 +55,7 @@ export class ReviewComponent implements OnInit, OnDestroy {
   readonly highlightTarget = signal<'email' | 'pdf' | null>(null);
   readonly editingField = signal<string | null>(null);
   readonly formError = signal('');
+  readonly pendingField = signal<string | null>(null);
 
   draftValue = '';
   draftReason = '';
@@ -63,6 +64,7 @@ export class ReviewComponent implements OnInit, OnDestroy {
   private objectUrl?: string;
   private poll?: Subscription;
   private routeSub?: Subscription;
+  private detailSeq = 0;
 
   ngOnInit(): void {
     this.routeSub = this.route.paramMap.subscribe((params) => {
@@ -82,14 +84,24 @@ export class ReviewComponent implements OnInit, OnDestroy {
   }
 
   load(): void {
-    if (!this.messageId) {
+    if (!this.messageId || this.saving()) {
       return;
     }
-    this.loading.set(!this.detail());
+    const first = !this.detail();
+    const seq = ++this.detailSeq;
+    this.loading.set(first);
     this.loadError.set('');
     this.queue.detail(this.messageId).subscribe({
-      next: (detail) => this.applyDetail(detail, !this.detail()),
+      next: (detail) => {
+        if (seq !== this.detailSeq || this.saving()) {
+          return;
+        }
+        this.applyDetail(detail, first);
+      },
       error: (err: HttpErrorResponse) => {
+        if (seq !== this.detailSeq) {
+          return;
+        }
         this.loading.set(false);
         this.stopPoll();
         this.loadError.set(readHttpError(err, 'Could not load this message.'));
@@ -241,6 +253,14 @@ export class ReviewComponent implements OnInit, OnDestroy {
     this.scrollTo('email-cite');
   }
 
+  isLocked(field: ExtractedField): boolean {
+    return Boolean(field.locked || field.review_action);
+  }
+
+  fieldPending(field: ExtractedField): boolean {
+    return this.saving() && this.pendingField() === field.field;
+  }
+
   startOverride(field: ExtractedField): void {
     if (!this.detail()?.can_review || this.saving()) {
       return;
@@ -252,11 +272,17 @@ export class ReviewComponent implements OnInit, OnDestroy {
   }
 
   cancelOverride(): void {
+    if (this.saving()) {
+      return;
+    }
     this.editingField.set(null);
     this.formError.set('');
   }
 
   accept(field: ExtractedField): void {
+    if (this.isLocked(field) || this.saving()) {
+      return;
+    }
     this.submit({ action: 'accept', field: field.field });
   }
 
@@ -280,7 +306,7 @@ export class ReviewComponent implements OnInit, OnDestroy {
   }
 
   complete(): void {
-    if (!this.detail()?.can_review) {
+    if (!this.detail()?.can_review || this.saving()) {
       return;
     }
     this.submit({ action: 'complete' });
@@ -311,16 +337,23 @@ export class ReviewComponent implements OnInit, OnDestroy {
     if (!this.messageId || this.saving()) {
       return;
     }
+    const seq = ++this.detailSeq;
     this.saving.set(true);
     this.notice.set('');
     this.queue.screenLiterature(this.messageId).subscribe({
       next: (res) => {
+        if (seq !== this.detailSeq) {
+          return;
+        }
         this.saving.set(false);
         this.noticeKind.set('ok');
         this.notice.set(res.message);
         this.startPoll();
       },
       error: (err: HttpErrorResponse) => {
+        if (seq !== this.detailSeq) {
+          return;
+        }
         this.saving.set(false);
         this.noticeKind.set('warn');
         this.notice.set(readHttpError(err, 'Could not queue literature screening.'));
@@ -332,10 +365,15 @@ export class ReviewComponent implements OnInit, OnDestroy {
     if (!this.messageId || this.saving()) {
       return;
     }
+    const seq = ++this.detailSeq;
     this.saving.set(true);
     this.notice.set('');
     this.queue.answerLiterature(this.messageId, identifiable).subscribe({
       next: (detail) => {
+        if (seq !== this.detailSeq) {
+          return;
+        }
+        this.applyDetail(detail, false);
         this.saving.set(false);
         this.noticeKind.set('ok');
         this.notice.set(
@@ -343,9 +381,11 @@ export class ReviewComponent implements OnInit, OnDestroy {
             ? 'Marked as an identifiable patient case. Split if more than one case is listed.'
             : 'Marked as not an identifiable patient case.',
         );
-        this.applyDetail(detail, false);
       },
       error: (err: HttpErrorResponse) => {
+        if (seq !== this.detailSeq) {
+          return;
+        }
         this.saving.set(false);
         this.noticeKind.set('warn');
         this.notice.set(readHttpError(err, 'Could not save the literature answer.'));
@@ -357,16 +397,23 @@ export class ReviewComponent implements OnInit, OnDestroy {
     if (!this.messageId || this.saving()) {
       return;
     }
+    const seq = ++this.detailSeq;
     this.saving.set(true);
     this.notice.set('');
     this.queue.splitLiterature(this.messageId).subscribe({
       next: (res) => {
+        if (seq !== this.detailSeq) {
+          return;
+        }
         this.saving.set(false);
         this.noticeKind.set('ok');
         this.notice.set(res.message);
         this.load();
       },
       error: (err: HttpErrorResponse) => {
+        if (seq !== this.detailSeq) {
+          return;
+        }
         this.saving.set(false);
         this.noticeKind.set('warn');
         this.notice.set(readHttpError(err, 'Could not split the article into cases.'));
@@ -374,15 +421,28 @@ export class ReviewComponent implements OnInit, OnDestroy {
     });
   }
 
-  private submit(body: { action: 'accept' | 'override' | 'complete'; field?: string; value?: string; reason?: string }): void {
+  private submit(body: {
+    action: 'accept' | 'override' | 'complete';
+    field?: string;
+    value?: string;
+    reason?: string;
+  }): void {
     if (!this.messageId || this.saving()) {
       return;
     }
+    const seq = ++this.detailSeq;
     this.saving.set(true);
+    this.pendingField.set(body.field ?? null);
     this.notice.set('');
+    this.lockLocally(body);
     this.queue.review(this.messageId, body).subscribe({
       next: (detail) => {
+        if (seq !== this.detailSeq) {
+          return;
+        }
+        this.applyDetail(detail, false, true);
         this.saving.set(false);
+        this.pendingField.set(null);
         this.editingField.set(null);
         this.formError.set('');
         this.noticeKind.set('ok');
@@ -393,10 +453,13 @@ export class ReviewComponent implements OnInit, OnDestroy {
               ? 'Override saved and logged in the audit trail.'
               : 'Field accepted and locked.',
         );
-        this.applyDetail(detail, false);
       },
       error: (err: HttpErrorResponse) => {
+        if (seq !== this.detailSeq) {
+          return;
+        }
         this.saving.set(false);
+        this.pendingField.set(null);
         const message = readHttpError(err, 'Could not save the review action.');
         if (body.action === 'override') {
           this.formError.set(message);
@@ -404,14 +467,16 @@ export class ReviewComponent implements OnInit, OnDestroy {
           this.noticeKind.set('warn');
           this.notice.set(message);
         }
+        this.load();
       },
     });
   }
 
-  private applyDetail(detail: QueueDetail, resetPdf = true): void {
-    this.detail.set(detail);
+  private applyDetail(detail: QueueDetail, resetPdf = true, keepLocalLocks = false): void {
+    const merged = keepLocalLocks ? this.mergeReviewedState(this.detail(), detail) : detail;
+    this.detail.set(merged);
     this.loading.set(false);
-    const busy = detail.status === 'pending' || detail.status === 'processing';
+    const busy = merged.status === 'pending' || merged.status === 'processing';
     if (busy) {
       this.startPoll();
     } else {
@@ -430,6 +495,85 @@ export class ReviewComponent implements OnInit, OnDestroy {
       this.selectedPdfId.set(next.id);
       this.loadPdf(next, this.page() || 1);
     }
+  }
+
+  private lockLocally(body: {
+    action: 'accept' | 'override' | 'complete';
+    field?: string;
+    value?: string;
+    reason?: string;
+  }): void {
+    const current = this.detail();
+    if (!current) {
+      return;
+    }
+    const now = new Date().toISOString();
+    const patch = (field: ExtractedField): ExtractedField => {
+      if (body.action === 'complete' && !this.isLocked(field)) {
+        return { ...field, locked: true, review_action: 'accept', reviewed_at: now };
+      }
+      if (field.field !== body.field) {
+        return field;
+      }
+      if (body.action === 'accept') {
+        return { ...field, locked: true, review_action: 'accept', reviewed_at: now };
+      }
+      if (body.action === 'override') {
+        return {
+          ...field,
+          value: body.value || field.value,
+          locked: true,
+          review_action: 'override',
+          review_reason: body.reason || field.review_reason,
+          reviewed_at: now,
+        };
+      }
+      return field;
+    };
+    this.detail.set({
+      ...current,
+      status: body.action === 'complete' ? 'reviewed' : current.status,
+      extracted_fields: current.extracted_fields.map(patch),
+      field_groups: current.field_groups.map((group) => ({
+        ...group,
+        fields: group.fields.map(patch),
+      })),
+    });
+  }
+
+  private mergeReviewedState(current: QueueDetail | null, incoming: QueueDetail): QueueDetail {
+    if (!current) {
+      return incoming;
+    }
+    const localLocks = new Map<string, ExtractedField>();
+    for (const field of current.extracted_fields) {
+      if (this.isLocked(field)) {
+        localLocks.set(field.field, field);
+      }
+    }
+    const mergeField = (field: ExtractedField): ExtractedField => {
+      const local = localLocks.get(field.field);
+      if (!local || this.isLocked(field)) {
+        return field;
+      }
+      return {
+        ...field,
+        value: local.review_action === 'override' ? local.value : field.value,
+        locked: true,
+        review_action: local.review_action,
+        review_reason: local.review_reason,
+        reviewed_at: local.reviewed_at,
+      };
+    };
+    return {
+      ...incoming,
+      status: current.status === 'reviewed' ? 'reviewed' : incoming.status,
+      extracted_fields: incoming.extracted_fields.map(mergeField),
+      field_groups: incoming.field_groups.map((group) => ({
+        ...group,
+        fields: group.fields.map(mergeField),
+      })),
+    };
   }
 
   private loadPdf(attachment: QueueAttachment, page: number): void {
@@ -493,9 +637,13 @@ export class ReviewComponent implements OnInit, OnDestroy {
   }
 
   private resetView(): void {
+    this.detailSeq += 1;
     this.detail.set(null);
     this.notice.set('');
     this.editingField.set(null);
+    this.pendingField.set(null);
+    this.saving.set(false);
+    this.formError.set('');
     this.highlightQuote.set(null);
     this.highlightTarget.set(null);
     this.pages.set(null);

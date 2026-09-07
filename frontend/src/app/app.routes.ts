@@ -26,6 +26,11 @@ export const routes: Routes = [
       import('./pages/reset-password/reset-password.component').then((m) => m.ResetPasswordComponent),
   },
   {
+    path: 'reset-password/:token',
+    loadComponent: () =>
+      import('./pages/reset-password/reset-password.component').then((m) => m.ResetPasswordComponent),
+  },
+  {
     path: 'inbox',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/inbox/inbox.component').then((m) => m.InboxComponent),

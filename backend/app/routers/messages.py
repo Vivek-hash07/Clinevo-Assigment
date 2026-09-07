@@ -172,6 +172,16 @@ def _load_message(db: DbSession, message_id: str, user_id: str) -> Message | Non
     )
 
 
+def _fresh_detail(db: DbSession, message_id: str, user_id: str, row: Message) -> QueueDetailOut:
+    # Sessions use expire_on_commit=False, so a second load would otherwise reuse the
+    # cached collections and return fields as still unlocked.
+    db.expire(row)
+    fresh = _load_message(db, message_id, user_id)
+    if fresh is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    return _detail_out(db, fresh)
+
+
 def _detail_out(db: DbSession, row: Message) -> QueueDetailOut:
     metrics = _pipeline_metrics(db, [row.id])
     duration_ms, pipeline_error = metrics.get(row.id, (None, None))
@@ -342,10 +352,7 @@ def review_message(message_id: str, body: ReviewRequest, user: CurrentUser, db: 
     except ReviewError as exc:
         db.rollback()
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    row = _load_message(db, message_id, user.id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
-    return _detail_out(db, row)
+    return _fresh_detail(db, message_id, user.id, row)
 
 
 @router.post("/{message_id}/literature/screen", response_model=MessageOut)
@@ -387,10 +394,7 @@ def answer_literature(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
     apply_human_answer(db, user, row, body.identifiable)
     db.commit()
-    row = _load_message(db, message_id, user.id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
-    return _detail_out(db, row)
+    return _fresh_detail(db, message_id, user.id, row)
 
 
 @router.post("/{message_id}/literature/split", response_model=LiteratureSplitOut)

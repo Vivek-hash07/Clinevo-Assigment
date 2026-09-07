@@ -1,10 +1,56 @@
 from __future__ import annotations
 
 import smtplib
+import socket
+import ssl
+from email import policy
 from email.message import EmailMessage
 from html import escape
 
 from app.config import Settings, get_settings
+
+
+def smtp_ipv4_addresses(host: str) -> list[str]:
+    """IPv4 only. Dual-stack hosts often return NAT64 AAAA records that hang on Render."""
+    try:
+        infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        return []
+    addresses: list[str] = []
+    for family, _socktype, _proto, _canon, sockaddr in infos:
+        if family != socket.AF_INET:
+            continue
+        ip = sockaddr[0]
+        if ip not in addresses:
+            addresses.append(ip)
+    return sorted(addresses)
+
+
+def open_smtp(host: str, port: int, *, use_tls: bool, timeout: float = 20) -> smtplib.SMTP:
+    context = ssl.create_default_context()
+    implicit_ssl = port == 465
+    ipv4s = smtp_ipv4_addresses(host)
+    targets = ipv4s or [host]
+    last_exc: Exception | None = None
+    for target in targets:
+        try:
+            if implicit_ssl:
+                smtp = smtplib.SMTP_SSL(timeout=timeout, context=context)
+            else:
+                smtp = smtplib.SMTP(timeout=timeout)
+            # SNI during SMTP_SSL.connect() reads _host before connect() overwrites it.
+            smtp._host = host
+            smtp.connect(target, port)
+            # Python 3.11+ connect() sets _host to the IP; STARTTLS must see the hostname
+            # or certificate verification fails with "IP address mismatch".
+            smtp._host = host
+            if use_tls and not implicit_ssl:
+                smtp.starttls(context=context)
+            return smtp
+        except Exception as exc:
+            last_exc = exc
+    assert last_exc is not None
+    raise last_exc
 
 
 def send_mail(
@@ -18,7 +64,8 @@ def send_mail(
     if not settings.smtp_host or not settings.smtp_from:
         raise RuntimeError("SMTP is not available")
 
-    message = EmailMessage()
+    # Default RFC wrapping at 78 chars splits reset URLs and corrupts the token.
+    message = EmailMessage(policy=policy.SMTP.clone(max_line_length=998))
     message["Subject"] = subject
     message["From"] = settings.smtp_from
     message["To"] = to_email
@@ -34,9 +81,11 @@ def send_mail(
             filename=filename,
         )
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-        if settings.smtp_use_tls:
-            smtp.starttls()
+    with open_smtp(
+        settings.smtp_host,
+        settings.smtp_port,
+        use_tls=settings.smtp_use_tls,
+    ) as smtp:
         if settings.smtp_user:
             smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.send_message(message)
@@ -50,7 +99,8 @@ def send_password_reset(to_email: str, name: str, reset_url: str, settings: Sett
     text = (
         f"Hello {greeting},\n\n"
         "We received a request to reset the password for your Clinevo Smart Inbox account.\n"
-        f"Open this link within 30 minutes to choose a new password:\n{reset_url}\n\n"
+        "Open this link within 30 minutes to choose a new password:\n"
+        f"<{reset_url}>\n\n"
         "If you did not request this, you can ignore this email.\n"
     )
     html = f"""

@@ -421,7 +421,7 @@
                         }
                         <div class="field-actions">
                           <button type="button" class="btn primary" (click)="saveOverride(field)" [disabled]="saving()">
-                            Save override
+                            {{ fieldPending(field) ? 'Saving…' : 'Save override' }}
                           </button>
                           <button type="button" class="btn ghost" (click)="cancelOverride()" [disabled]="saving()">
                             Cancel
@@ -442,11 +442,16 @@
                               type="button"
                               class="btn ghost"
                               (click)="accept(field)"
-                              [disabled]="saving() || field.review_action === 'accept'"
+                              [disabled]="saving() || isLocked(field)"
                             >
-                              Accept
+                              {{ field.review_action === 'accept' ? 'Accepted' : 'Accept' }}
                             </button>
-                            <button type="button" class="btn ghost" (click)="startOverride(field)" [disabled]="saving()">
+                            <button
+                              type="button"
+                              class="btn ghost"
+                              (click)="startOverride(field)"
+                              [disabled]="saving()"
+                            >
                               Override
                             </button>
                           }

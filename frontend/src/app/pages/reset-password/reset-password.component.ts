@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Subscription, combineLatest } from 'rxjs';
 
 import { AuthService } from '../../core/auth.service';
 
@@ -11,7 +12,7 @@ import { AuthService } from '../../core/auth.service';
   imports: [CommonModule, ReactiveFormsModule, RouterLink],
   templateUrl: './reset-password.component.html',
 })
-export class ResetPasswordComponent implements OnInit {
+export class ResetPasswordComponent implements OnInit, OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
@@ -26,11 +27,22 @@ export class ResetPasswordComponent implements OnInit {
     confirm: ['', [Validators.required]],
   });
 
+  private routeSub?: Subscription;
+
   ngOnInit(): void {
-    this.token.set(this.route.snapshot.queryParamMap.get('token') || '');
-    if (!this.token()) {
-      this.error.set('This reset link is missing a token. Request a new one from sign in.');
-    }
+    this.routeSub = combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(
+      ([params, query]) => {
+        const token = this.cleanToken(params.get('token') || query.get('token') || '');
+        this.token.set(token);
+        if (!token && !this.error()) {
+          this.error.set('This reset link is missing a token. Request a new one from sign in.');
+        }
+      },
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.routeSub?.unsubscribe();
   }
 
   submit(): void {
@@ -64,5 +76,15 @@ export class ResetPasswordComponent implements OnInit {
         );
       },
     });
+  }
+
+  private cleanToken(raw: string): string {
+    let token = (raw || '').trim().replace(/^<|>$/g, '');
+    try {
+      token = decodeURIComponent(token);
+    } catch {
+      // Already decoded, or the value is not a valid escape sequence.
+    }
+    return token.replace(/\s+/g, '');
   }
 }

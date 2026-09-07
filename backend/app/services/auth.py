@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException, Response, status
@@ -19,6 +19,8 @@ from app.security import (
     hash_password,
     hash_token,
     new_opaque_token,
+    new_reset_token,
+    normalize_reset_token,
     verify_password,
 )
 from app.services.audit import write_audit
@@ -179,7 +181,7 @@ def request_password_reset(db: Session, email: str) -> None:
     if user is None:
         return
     now = datetime.now(UTC)
-    token = new_opaque_token()
+    token = new_reset_token()
     token_digest = hash_token(token)
     db.add(
         PasswordResetToken(
@@ -190,7 +192,7 @@ def request_password_reset(db: Session, email: str) -> None:
     )
     write_audit(db, "auth.forgot_password", user.id, {"email": email_norm})
     db.commit()
-    reset_url = f"{settings.frontend_url.rstrip('/')}/reset-password?token={quote(token, safe='')}"
+    reset_url = f"{settings.frontend_url.rstrip('/')}/reset-password/{token}"
     try:
         send_password_reset(user.email, user.name, reset_url, settings)
     except Exception as exc:
@@ -217,21 +219,39 @@ def request_password_reset(db: Session, email: str) -> None:
     db.commit()
 
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 def reset_password(db: Session, token: str, password: str) -> User:
+    cleaned = normalize_reset_token(token)
+    if len(cleaned) < 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has expired.",
+        )
     now = datetime.now(UTC)
     stored = db.scalar(
         select(PasswordResetToken)
-        .where(
-            PasswordResetToken.token_hash == hash_token(token),
-            PasswordResetToken.used_at.is_(None),
-            PasswordResetToken.expires_at > now,
-        )
+        .where(PasswordResetToken.token_hash == hash_token(cleaned))
         .with_for_update()
     )
     if stored is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This reset link is invalid or has expired.",
+        )
+    if stored.used_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link was already used. Sign in with your new password, or request another email.",
+        )
+    if _as_utc(stored.expires_at) <= now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link has expired. Request another email and try again.",
         )
     user = db.get(User, stored.user_id)
     if user is None:

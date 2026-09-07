@@ -87,3 +87,28 @@ def test_latest_field_review_wins():
     second = SimpleNamespace(action="override", field_name="patient.age", created_at=2, reason="fix")
     latest = latest_field_reviews([first, second])  # type: ignore[arg-type]
     assert latest["patient.age"].action == "override"
+
+
+class _MemDb:
+    def __init__(self) -> None:
+        self.added: list[object] = []
+
+    def add(self, obj: object) -> None:
+        self.added.append(obj)
+
+
+def test_apply_review_appends_lock_to_message_collection():
+    from app.services.review import apply_review
+
+    field = ExtractedField(field="patient.age", value="61", confidence=0.9)
+    message = SimpleNamespace(id="m1", status="ready", extracted_fields=[field], reviews=[])
+    user = SimpleNamespace(id="u1", email="reviewer@example.com", name="Reviewer")
+    apply_review(
+        _MemDb(),  # type: ignore[arg-type]
+        user,  # type: ignore[arg-type]
+        message,  # type: ignore[arg-type]
+        ReviewRequest(action="accept", field="patient.age"),
+    )
+    assert len(message.reviews) == 1
+    assert message.reviews[0].action == "accept"
+    assert message.reviews[0].field_name == "patient.age"

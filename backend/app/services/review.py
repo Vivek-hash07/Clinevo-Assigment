@@ -126,16 +126,15 @@ def apply_review(db: Session, user: User, message: Message, req: ReviewRequest) 
     if validated.action == REVIEW_ACTION_OVERRIDE:
         field_row.value = new_value
 
-    db.add(
-        Review(
-            message_id=message.id,
-            user_id=user.id,
-            action=validated.action,
-            field_name=validated.field,
-            old_value=old_value,
-            new_value=new_value,
-            reason=validated.reason,
-        )
+    _add_review(
+        db,
+        message,
+        user_id=user.id,
+        action=validated.action,
+        field_name=validated.field,
+        old_value=old_value,
+        new_value=new_value,
+        reason=validated.reason,
     )
     event_type = "review.accepted" if validated.action == REVIEW_ACTION_ACCEPT else "review.overridden"
     write_audit(
@@ -156,22 +155,49 @@ def apply_review(db: Session, user: User, message: Message, req: ReviewRequest) 
     return message
 
 
+def _add_review(
+    db: Session,
+    message: Message,
+    *,
+    user_id: str | None,
+    action: str,
+    field_name: str | None,
+    old_value: str | None,
+    new_value: str | None,
+    reason: str | None,
+) -> Review:
+    # Append onto the loaded collection so expire_on_commit=False still serializes the lock.
+    review = Review(
+        message_id=message.id,
+        user_id=user_id,
+        action=action,
+        field_name=field_name,
+        old_value=old_value,
+        new_value=new_value,
+        reason=reason,
+    )
+    db.add(review)
+    reviews = getattr(message, "reviews", None)
+    if reviews is not None and review not in reviews:
+        reviews.append(review)
+    return review
+
+
 def _complete_review(db: Session, user: User, message: Message, reason: str | None) -> Message:
     locked = latest_field_reviews(list(message.reviews))
     accepted: list[str] = []
     for field_row in message.extracted_fields:
         if field_row.field in locked:
             continue
-        db.add(
-            Review(
-                message_id=message.id,
-                user_id=user.id,
-                action=REVIEW_ACTION_ACCEPT,
-                field_name=field_row.field,
-                old_value=field_row.value,
-                new_value=field_row.value,
-                reason=reason,
-            )
+        _add_review(
+            db,
+            message,
+            user_id=user.id,
+            action=REVIEW_ACTION_ACCEPT,
+            field_name=field_row.field,
+            old_value=field_row.value,
+            new_value=field_row.value,
+            reason=reason,
         )
         accepted.append(field_row.field)
 

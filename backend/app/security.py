@@ -48,8 +48,21 @@ def new_opaque_token() -> str:
     return secrets.token_urlsafe(48)
 
 
+def new_reset_token() -> str:
+    # Shorter than refresh tokens so the email URL is less likely to wrap.
+    return secrets.token_urlsafe(32)
+
+
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def normalize_reset_token(token: str) -> str:
+    """Undo wrapping/encoding that mail clients apply to reset links."""
+    from urllib.parse import unquote
+
+    text = unquote((token or "").strip().strip("<>"))
+    return "".join(text.split())
 
 
 def create_token(user_id: str, token_type: TokenType, settings: Settings | None = None) -> str:
