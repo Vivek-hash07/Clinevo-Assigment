@@ -12,6 +12,7 @@ from app.constants import (
     CAT_PQC,
     DERIVED_FIELDS,
     MESSAGE_CATEGORIES,
+    MI_FIELDS,
     NOT_STATED,
 )
 from app.services.ai_pack import MessagePack, SourceSpan, parse_source_ref
@@ -170,6 +171,48 @@ def select_labels(items: list[ClassificationHit], min_confidence: float) -> list
     if confidence < 0.5:
         confidence = 0.5
     return [ClassificationHit(CAT_IRRELEVANT, True, confidence, reason)]
+
+
+def not_relevant_hit(reason: str, confidence: float = 0.7) -> ClassificationHit:
+    return ClassificationHit(CAT_IRRELEVANT, True, max(confidence, 0.5), reason)
+
+
+def drop_mi_if_understand_irrelevant(
+    hits: list[ClassificationHit],
+    relevant: bool | None,
+) -> list[ClassificationHit]:
+    """Understand already said this is not ICSR/PQC/MI. Keep safety/quality; drop false MI."""
+    if relevant is not False:
+        return hits
+    if not any(hit.category == CAT_MI for hit in hits):
+        return hits
+    kept = [hit for hit in hits if hit.category != CAT_MI]
+    if any(hit.category in (CAT_ICSR, CAT_PQC) for hit in kept):
+        return kept
+    return [
+        not_relevant_hit(
+            "Understand step found no safety report, quality complaint, or medical-product question."
+        )
+    ]
+
+
+def drop_empty_mi(
+    hits: list[ClassificationHit],
+    facts: list[ExtractedFact],
+) -> tuple[list[ClassificationHit], list[ExtractedFact], bool]:
+    """MI with no extractable product question is a false positive (surveys, course mail)."""
+    if not any(hit.category == CAT_MI for hit in hits):
+        return hits, facts, False
+    questions = next((fact for fact in facts if fact.field == "mi.questions"), None)
+    if questions is not None and not is_not_stated(questions.value):
+        return hits, facts, False
+    remaining_hits = [hit for hit in hits if hit.category != CAT_MI]
+    remaining_facts = [fact for fact in facts if fact.field not in MI_FIELDS]
+    if not remaining_hits:
+        remaining_hits = [
+            not_relevant_hit("No extractable medical-information question about a product.")
+        ]
+    return remaining_hits, remaining_facts, True
 
 
 def empty_fact(field_name: str, email_ref: str, reason: str, prompt_version: str = "") -> ExtractedFact:

@@ -19,10 +19,14 @@ from app.constants import (
     PROMPT_LITERATURE,
     PROMPT_UNDERSTAND,
 )
-from app.prompts import PROMPT_TEMPLATES, UNKNOWN_OVER_GUESSING
+from app.prompts import PROMPT_TEMPLATES, UNKNOWN_OVER_GUESSING, fill_prompt
 from app.services.ai_normalize import (
+    ClassificationHit,
+    ExtractedFact,
     coerce_classifications,
     coerce_fields,
+    drop_empty_mi,
+    drop_mi_if_understand_irrelevant,
     is_not_stated,
     locate_quote,
     normalize_category,
@@ -222,3 +226,92 @@ def test_is_not_stated_aliases():
     assert is_not_stated("n/a")
     assert not is_not_stated("67 years")
     assert not is_not_stated("no")
+
+
+def test_classify_prompt_treats_course_feedback_as_not_mi():
+    text = PROMPT_TEMPLATES[PROMPT_CLASSIFY].lower()
+    assert "medical information" in text
+    assert "udemy" in text
+    assert "leave a review" in text
+    assert "{understand_prior}" in PROMPT_TEMPLATES[PROMPT_CLASSIFY]
+    filled = fill_prompt(
+        PROMPT_TEMPLATES[PROMPT_CLASSIFY],
+        pack="COURSE EMAIL",
+        understand_prior="relevant=false\nrelevance_reason=marketing",
+    )
+    assert "COURSE EMAIL" in filled
+    assert "relevant=false" in filled
+    assert "{pack}" not in filled
+    assert "{understand_prior}" not in filled
+
+
+def test_understand_prompt_marks_lms_mail_irrelevant():
+    text = PROMPT_TEMPLATES[PROMPT_UNDERSTAND].lower()
+    assert "course completion" in text
+    assert "relevant=false" in text.replace(" ", "")
+
+
+def test_drop_mi_when_understand_already_said_not_relevant():
+    hits = [
+        ClassificationHit(CAT_MI, True, 0.8, "The message requests feedback on course content."),
+    ]
+    got = drop_mi_if_understand_irrelevant(hits, False)
+    assert len(got) == 1
+    assert got[0].category == CAT_IRRELEVANT
+
+
+def test_understand_irrelevant_does_not_drop_safety_or_quality():
+    hits = [
+        ClassificationHit(CAT_ICSR, True, 0.9, "rash after Examplemab"),
+        ClassificationHit(CAT_MI, True, 0.8, "also asked a dose question"),
+    ]
+    got = drop_mi_if_understand_irrelevant(hits, False)
+    assert [hit.category for hit in got] == [CAT_ICSR]
+
+
+def test_empty_mi_extract_demotes_udemy_style_false_positive():
+    hits = [ClassificationHit(CAT_MI, True, 0.8, "The message requests feedback on course content.")]
+    facts = [
+        ExtractedFact(
+            field="mi.questions",
+            value=NOT_STATED,
+            confidence=0.0,
+            source_ref=f"email:{MESSAGE_ID}",
+            quote="",
+        ),
+        ExtractedFact(
+            field="mi.product",
+            value=NOT_STATED,
+            confidence=0.0,
+            source_ref=f"email:{MESSAGE_ID}",
+            quote="",
+        ),
+        ExtractedFact(
+            field="mi.topic",
+            value=NOT_STATED,
+            confidence=0.0,
+            source_ref=f"email:{MESSAGE_ID}",
+            quote="",
+        ),
+    ]
+    got_hits, got_facts, demoted = drop_empty_mi(hits, facts)
+    assert demoted is True
+    assert [hit.category for hit in got_hits] == [CAT_IRRELEVANT]
+    assert got_facts == []
+
+
+def test_real_mi_question_is_kept():
+    hits = [ClassificationHit(CAT_MI, True, 0.9, "Asked whether Exampletab can be taken with breakfast.")]
+    facts = [
+        ExtractedFact(
+            field="mi.questions",
+            value="Can Exampletab be taken with breakfast?",
+            confidence=0.9,
+            source_ref=f"email:{MESSAGE_ID}",
+            quote="Can Exampletab 10 mg be taken with breakfast",
+        )
+    ]
+    got_hits, got_facts, demoted = drop_empty_mi(hits, facts)
+    assert demoted is False
+    assert got_hits == hits
+    assert got_facts == facts

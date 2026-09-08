@@ -27,14 +27,32 @@ Classify the WHOLE mailbox message (email body plus every PDF page in the pack) 
 categories below. This is multi-label: a message may belong to more than one category at the same
 time. Never force a single label. Decide each category independently.
 
+This is a pharmacovigilance / medical-information mailbox, not a general email classifier.
+
 Categories:
-- {CAT_ICSR}: a person had a suspected adverse reaction / bad outcome involving a product (patient +
-  product + event, even loosely).
-- {CAT_PQC}: something is physically wrong with the product (broken seal, wrong color, contamination,
-  damaged packaging, counterfeit, missing tablets).
-- {CAT_MI}: a question about a product (dosing, how to take it, interactions) with no reaction and
-  no product defect.
-- {CAT_IRRELEVANT}: marketing, spam, internal admin, or anything that is none of the above.
+- {CAT_ICSR}: a person had a suspected adverse reaction / bad outcome involving a medicinal or
+  healthcare product (patient + product + event, even loosely).
+- {CAT_PQC}: something is physically wrong with a medicinal or healthcare product (broken seal,
+  wrong color, contamination, damaged packaging, counterfeit, missing tablets).
+- {CAT_MI}: Medical Information. The SENDER is asking US a question about using a medicinal or
+  healthcare product (dose, how to take it, interactions, storage, administration, indication).
+  There is no adverse reaction and no product defect. "Info Request" does NOT mean any request
+  for information.
+- {CAT_IRRELEVANT}: marketing, spam, LMS/course mail, exam tips, review/survey/feedback asks,
+  internal admin, receipts, or anything that is none of the above.
+
+{CAT_MI} applies only when ALL of these are true:
+- The inbound sender is asking a product-use question (not answering, not congratulating, not selling).
+- The question is about a medicinal / healthcare product (a drug, device, or similar), not a
+  training course, exam, software subscription, or website.
+- You can point to the question in the pack. If you cannot, MI does not apply.
+
+Hard negatives — these are {CAT_IRRELEVANT}, never MI:
+- Course / LMS notifications (Udemy, Coursera, exam tips, "congratulations on completing a course").
+- The sender asking the recipient to leave a review, rating, NPS, survey, or course-content feedback.
+- Marketing, newsletters, promotions, unsubscribe footers, calendar invites, receipts.
+- A feedback form such as "tell us what the course missed" — that is the sender requesting
+  information FROM the recipient, which is the opposite of a Medical Information enquiry.
 
 Return JSON only with this shape:
 {{
@@ -52,7 +70,12 @@ Rules:
 - reason must be one sentence pointing at evidence in the pack (or stating that none exists).
 - If any of ICSR / PQC / MI applies, Not Relevant must have applies=false.
 - If none of ICSR / PQC / MI applies, Not Relevant must have applies=true.
+- If the prior understand step says this is not a safety report, quality complaint, or product
+  question, do not label MI just because someone asked for feedback, a review, or a form fill.
 - {UNKNOWN_OVER_GUESSING}
+
+Prior understand step (hint only; ICSR/PQC evidence in the pack still wins):
+{{understand_prior}}
 
 Message pack:
 {{pack}}
@@ -154,6 +177,11 @@ Return JSON only:
 
 Rules:
 - One object per catalog field.
+- mi.questions is the inbound sender's question(s) about using a medicinal/healthcare product.
+  Do not treat "please give feedback", "leave a review", "fill this form", course tips, or
+  congratulations mail as a medical question.
+- If the sender is not asking how to use a medicinal/healthcare product, every field MUST be
+  "{NOT_STATED}" with confidence 0.0 and an empty quote.
 - Missing facts MUST be "{NOT_STATED}" with confidence 0.0 and an empty quote.
 - {UNKNOWN_OVER_GUESSING}
 
@@ -177,7 +205,10 @@ Return JSON only:
 Rules:
 - summary is 10–15 sentences covering sender intent, what the attachments add, and whether this looks
   like a safety report, quality complaint, product question, or none of those — and why.
-- relevant is true if the message is plausibly ICSR, PQC, or MI.
+- relevant is true ONLY if the message is plausibly ICSR, PQC, or a Medical Information question
+  about a medicinal/healthcare product. Course completion mail, LMS notifications, exam tips,
+  "please leave a review", surveys, marketing, and the sender asking the recipient for feedback
+  are relevant=false.
 - needs_human_review is true when OCR is weak, handwriting is present, language is mixed, evidence
   conflicts, or you had to leave important facts unknown.
 - Do not invent facts. If something is unclear, say so in the summary.

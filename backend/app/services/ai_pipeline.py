@@ -18,6 +18,7 @@ from app.ai_contracts import (
 from app.config import Settings, get_settings
 from app.constants import (
     CAT_IRRELEVANT,
+    NOT_STATED,
     PROMPT_CLASSIFY,
     PROMPT_UNDERSTAND,
     REVIEW_LOCK_ACTIONS,
@@ -33,6 +34,8 @@ from app.services.ai_normalize import (
     ExtractedFact,
     coerce_classifications,
     coerce_fields,
+    drop_empty_mi,
+    drop_mi_if_understand_irrelevant,
 )
 from app.services.ai_pack import MessagePack, build_message_pack, load_message_for_ai
 from app.services.audit import write_audit
@@ -85,9 +88,10 @@ def _structured_call(
     spec: PromptSpec,
     pack_text: str,
     settings: Settings,
+    **prompt_fields: str,
 ) -> LlmCompletion:
     template = PROMPT_TEMPLATES[spec.version]
-    user = fill_prompt(template, pack=pack_text)
+    user = fill_prompt(template, pack=pack_text, **prompt_fields)
     return client.complete_json(
         [
             {"role": "system", "content": SYSTEM_RULES},
@@ -99,6 +103,18 @@ def _structured_call(
         json_schema=spec.schema,
         schema_name=spec.schema_name,
     )
+
+
+def _understand_prior(message: Message) -> str:
+    if message.relevant is True:
+        flag = "true"
+    elif message.relevant is False:
+        flag = "false"
+    else:
+        flag = "unknown"
+    reason = (message.relevance_reason or "").strip() or "not given"
+    summary = (message.summary or "").strip() or "not given"
+    return f"relevant={flag}\nrelevance_reason={reason}\nsummary={summary[:1200]}"
 
 
 def _pdfs_still_open(message: Message) -> bool:
@@ -251,7 +267,13 @@ def classify_message(message_id: str, run_id: str | None = None) -> dict[str, An
         message.status = STATUS_PROCESSING
         client = get_llm_client()
         try:
-            llm = _structured_call(client, PROMPT_SPECS[PROMPT_CLASSIFY], pack.text, settings)
+            llm = _structured_call(
+                client,
+                PROMPT_SPECS[PROMPT_CLASSIFY],
+                pack.text,
+                settings,
+                understand_prior=_understand_prior(message),
+            )
         except LlmError as exc:
             _finish_run(run, status="failed", started=started)
             if not exc.retryable:
@@ -259,9 +281,12 @@ def classify_message(message_id: str, run_id: str | None = None) -> dict[str, An
             raise
 
         hits = coerce_classifications(llm.data.get("classifications"), settings.ai_classify_min_confidence)
+        hits = drop_mi_if_understand_irrelevant(hits, message.relevant)
         _upsert_classifications(db, message, hits, llm.model)
-        if any(hit.category != CAT_IRRELEVANT for hit in hits) and message.relevant is False:
+        if any(hit.category != CAT_IRRELEVANT for hit in hits):
             message.relevant = True
+        elif message.relevant is None:
+            message.relevant = False
         duration_ms = _finish_run(run, status="succeeded", started=started, model=llm.model)
         write_audit(
             db,
@@ -379,6 +404,18 @@ def extract_facts(message_id: str, run_id: str | None = None) -> dict[str, Any]:
             raise
 
         locked = _protected_fields(db, message.id)
+        labels = [row.category for row in message.classifications]
+        hits = [
+            ClassificationHit(row.category, True, float(row.confidence or 0.0), row.reason or "")
+            for row in message.classifications
+        ]
+        hits, facts, mi_demoted = drop_empty_mi(hits, facts)
+        if mi_demoted:
+            _upsert_classifications(db, message, hits, models[-1] if models else None)
+            labels = [hit.category for hit in hits]
+            if all(hit.category == CAT_IRRELEVANT for hit in hits):
+                message.relevant = False
+            _clear_fields_not_in(db, message, {fact.field for fact in facts}, locked)
         _upsert_fields(db, message, facts, models[-1] if models else None, locked)
         if ungrounded:
             message.needs_human_review = True
@@ -398,10 +435,11 @@ def extract_facts(message_id: str, run_id: str | None = None) -> dict[str, Any]:
                 "duration_ms": duration_ms,
                 "input_hash": pack.input_hash,
                 "field_count": len(facts),
-                "not_stated_count": sum(1 for fact in facts if fact.value == "Not stated"),
+                "not_stated_count": sum(1 for fact in facts if fact.value == NOT_STATED),
                 "ungrounded_count": ungrounded,
                 "locked_fields": sorted(locked),
                 "categories": labels,
+                "mi_demoted": mi_demoted,
             },
             message_id=message.id,
         )
@@ -413,7 +451,8 @@ def extract_facts(message_id: str, run_id: str | None = None) -> dict[str, Any]:
             "user_id": message.user_id,
             "categories": labels,
             "field_count": len(facts),
-            "not_stated_count": sum(1 for fact in facts if fact.value == "Not stated"),
+            "not_stated_count": sum(1 for fact in facts if fact.value == NOT_STATED),
+            "mi_demoted": mi_demoted,
             "screen_literature": should_auto_screen(message),
         }
 
@@ -452,6 +491,18 @@ def mark_ai_failed(message_id: str, run_id: str | None, reason: str) -> dict[str
         return {"ok": True, "reason": reason}
 
 
+def _clear_fields_not_in(
+    db: Session,
+    message: Message,
+    keep: set[str],
+    locked: set[str],
+) -> None:
+    leftover = [row for row in list(message.extracted_fields) if row.field not in keep and row.field not in locked]
+    for row in leftover:
+        db.delete(row)
+        message.extracted_fields.remove(row)
+
+
 def _upsert_classifications(
     db: Session,
     message: Message,
@@ -472,6 +523,8 @@ def _upsert_classifications(
     for category, row in existing.items():
         if category not in keep:
             db.delete(row)
+            if row in message.classifications:
+                message.classifications.remove(row)
 
 
 def _upsert_fields(

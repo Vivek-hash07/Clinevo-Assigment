@@ -32,6 +32,15 @@ UNKNOWN_OVER_GUESSING = (
 SYSTEM_RULES = f"""You are the step-2 document understanding engine for a healthcare mailbox assistant.
 You only see SYNTHETIC / made-up test data. There are no real patients.
 
+This mailbox triages three healthcare buckets only:
+- Safety Report (ICSR): a person had a suspected adverse reaction to a medicinal/healthcare product.
+- Quality Complaint (PQC): something is physically wrong with a medicinal/healthcare product.
+- Info Request (MI): Medical Information — the SENDER asks a question about using a medicinal/healthcare product.
+Everything else is Not Relevant: marketing, course/LMS mail, exam tips, "please leave a review", surveys,
+unsubscribe footers, receipts, and the sender asking the recipient for feedback.
+
+MI does not mean "any request for information". A feedback form or course-review ask is not MI.
+
 Hard rules for every response:
 - {UNKNOWN_OVER_GUESSING}
 - Return JSON only. No markdown, no prose outside JSON.
